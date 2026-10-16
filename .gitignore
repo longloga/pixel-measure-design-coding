@@ -1,0 +1,14 @@
+# Dữ liệu đo hiệu suất: chứa tên dự án, đường dẫn máy — không bao giờ commit / chia sẻ
+metrics/
+
+# File tạm khi chạy script (ảnh chụp, crop, kết quả so sánh)
+shots/
+crops/
+*.png
+*.jpg
+*.json
+!package.json
+
+__pycache__/
+*.pyc
+.DS_Store
