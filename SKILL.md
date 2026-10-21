@@ -35,9 +35,12 @@ File tạm (crop, shots, json) để trong scratchpad, không để trong projec
 | `crop_assets.py` | cắt ảnh placeholder từ design |
 | `shot.py` | chụp render full-page nhiều viewport (tự cuộn kích hoạt fade-in, tắt animation, chờ font, dừng slider, `--hover`) |
 | `pixeldiff.py` | **so sánh tự động** design↔render: drift/Δ từng dải, dx, diff%, heatmap, JSON |
+| `rects.py` | so **tọa độ DOM từng khối** với số đo design: Δy, Δloc (lỗi phát sinh giữa 2 khối), Δh, `--styles` (font/lh/ls) — không bị nhiễu bởi header/KV dùng chung |
+| `rowcmp.py` | so **từng dòng mực** trong 1 khối design↔render (tự dò dy): lệch dọc, x kết thúc dòng (ls/font sai → xuống dòng khác) |
 | `compare.py` | ghép cạnh nhau 1 đoạn để xem bằng mắt |
 | `audit.py` | **kiểm tra tự động** HTML/CSS/responsive/link/ảnh/font/JS, exit 1 nếu còn lỗi E |
 | `metrics.py` | **ghi hiệu suất**: start/iter/fix/end/review/report |
+| `changelog.py` | chỉ dùng khi **sửa chính skill**: `draft` (khung changelog từ git diff), `check`, `install-hook` |
 
 Tài liệu: `references/measurement-rules.md` (công thức suy số đo) và `references/lessons.md` (bộ quy tắc
 từ lỗi thực tế, có ID `L-xxx-nn` — dùng để ghi metrics và để self-review).
@@ -49,6 +52,13 @@ từ lỗi thực tế, có ID `L-xxx-nn` — dùng để ghi metrics và để 
 ```bash
 python3 $P/metrics.py start --page index --source png --note "top PC+SP"   # chạy trong thư mục project
 ```
+
+**Dựng môi trường trước khi đo (5 phút đầu, đừng để giữa chừng mới phát hiện — L-SHOT-06/07):**
+- Trang dùng path gốc `/data/...` → chạy server ở gốc project (`python3 -m http.server 8765`), không dùng file://.
+- Playwright/Chrome cần mạng → chạy `shot.py`/`rects.py`/`audit.py` **ngoài sandbox** ngay từ lần đầu.
+- Kiểm tra cách compile CSS **tái tạo đúng** file `.css` hiện có (compile ra file tạm rồi so kích thước/selector)
+  TRƯỚC khi sửa SCSS. Live Sass Compile thường kèm autoprefixer → compile sass trơn sẽ khác hẳn.
+- Phạm vi: header/KV/footer/khối dùng chung khác design → hỏi hoặc ghi lại, không chỉnh pixel phần đó.
 
 Đọc `references/lessons.md` (ít nhất các mục [!!]) và memory của project (quy ước riêng: thư mục ảnh,
 font, thứ tự trang...).
@@ -125,6 +135,12 @@ python3 $P/audit.py index.html --json $S/audit.json --quiet-info
 python3 $P/metrics.py iter --pixeldiff $S/pd_pc.json --pixeldiff $S/pd_sp.json --audit $S/audit.json
 ```
 
+**Khi header/KV/phần dùng chung ngoài phạm vi khác design** (pixeldiff lệch dây chuyền từ đầu trang):
+ghi tọa độ design của mọi khối chính vào `targets.json` (1 lần, bằng `measure.py`) rồi dùng
+`rects.py URL targets.json` thay cho pixeldiff ở mỗi vòng — nhanh hơn (không chụp ảnh), căn theo khối mốc,
+`Δloc` chỉ thẳng chỗ gây lệch. Dùng `rowcmp.py` cho khối có Δh ≠ 0 để thấy dòng nào lệch / xuống dòng khác.
+Gom TẤT CẢ lỗi của 1 vòng rồi sửa 1 lần, không sửa từng chỗ rồi chụp lại.
+
 Đọc kết quả:
 - `shot.py` báo "còn N khối opacity:0" → xử lý trước (L-SHOT-01), nếu không mọi so sánh sai.
 - `pixeldiff`: sửa từ dải có |Δ| > 3 **trên cùng** trước (lỗi chiều cao cục bộ nằm ngay trên dải đó; sửa
@@ -133,7 +149,8 @@ python3 $P/metrics.py iter --pixeldiff $S/pd_pc.json --pixeldiff $S/pd_sp.json -
   trên ảnh render (`--scale 1`) cùng vùng để tìm khối gây lệch. Dải "NỘI DUNG KHÁC HẲN" = thiếu khối, ảnh
   khác, slider → kiểm tra, dùng `--mask` nếu là ảnh placeholder/slider có chủ ý.
 - `audit.py`: E phải = 0 (tràn ngang, link/ảnh hỏng, thẻ không đóng, id trùng, lỗi JS). W xem từng mục,
-  cái nào đúng theo design thì giữ và nêu trong báo cáo.
+  cái nào đúng theo design thì giữ và nêu trong báo cáo. Lỗi tài nguyên khác domain (GTM, font CDN bị CORS ở
+  localhost) báo W `*-EXT`; cần coi là E thì `--strict-external`. E/W có sẵn từ trước (không do mình) → báo, không tự sửa.
 - Sau khi làm SP, chạy lại `pixeldiff` PC để chắc PC không đổi.
 
 Mỗi vòng sửa → chạy lại cả khối lệnh trên (mỗi lần `metrics.py iter` = 1 vòng). Mục tiêu đạt:
@@ -166,6 +183,22 @@ python3 $P/metrics.py end --deliver
    báo bài học đã lặp ≥ 2 lần → nâng mức trong lessons.md và cân nhắc thêm kiểm tra vào `audit.py`.
 5. Chạy lại bước 6, báo số trước/sau. Nếu người dùng cho điểm/nhận xét chất lượng:
    `metrics.py review --score N`.
+
+## Cập nhật chính skill (script / SKILL.md / references / README)
+
+Mỗi lần sửa skill — kể cả thêm 1 bài học — BẮT BUỘC thêm 1 mục vào `CHANGELOG.md` (mới nhất ở trên), gồm:
+**Thay đổi** (làm gì) · **Lý do** (vấn đề thực tế nào, mã bài học) · **So sánh trước / sau** (hành vi + số liệu
+đo được: thời gian, E/W audit, độ lệch px...; chưa đo thì ghi "chưa đo") · **Tương thích** (lệnh cũ còn chạy
+không, option giữ hành vi cũ).
+
+1. Trước khi sửa: đo số liệu "trước" trên 1 trang thật (để có cột Trước).
+2. Sửa, rồi chạy lại cùng lệnh để có cột Sau.
+3. `python3 scripts/changelog.py draft` → khung đã điền danh sách file / option CLI / mã bài học thay đổi;
+   tự điền Lý do và bảng so sánh; nâng phiên bản (MAJOR bỏ/đổi hành vi cũ, MINOR thêm script/option/quy trình,
+   PATCH sửa lỗi/chữ).
+4. `python3 scripts/changelog.py check` (pre-commit hook chạy tự động nếu đã `install-hook`) → commit.
+
+Không ghi tên khách hàng / dự án / đường dẫn máy vào CHANGELOG (repo được chia sẻ).
 
 ## Đo hiệu suất
 

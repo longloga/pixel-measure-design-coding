@@ -67,6 +67,8 @@ Claude sẽ báo kết quả bằng bảng số (độ lệch từng section, s�
 | `scripts/pixeldiff.py` | So sánh design ↔ render tự động, xuất heatmap |
 | `scripts/audit.py` | Kiểm tra HTML, responsive (tràn ngang), link/ảnh hỏng, font, lỗi JS |
 | `scripts/metrics.py` | Ghi thời gian, số vòng sửa, số lần bị yêu cầu sửa (dữ liệu lưu ở máy mỗi người) |
+| `scripts/rects.py`, `rowcmp.py` | So tọa độ từng khối / từng dòng chữ với design (khi header, KV dùng chung khác design) |
+| `CHANGELOG.md`, `scripts/changelog.py` | Lịch sử cập nhật skill: thay đổi gì, vì sao, so sánh trước/sau |
 
 Các script chạy độc lập được, ví dụ chỉ kiểm tra lỗi trang:
 
@@ -84,4 +86,4 @@ Không đưa vào skill: tên khách hàng, ảnh design, đường dẫn dự �
 dự án ghi vào memory / CLAUDE.md của dự án đó.
 
 - Người duy trì: ロン
-- Phiên bản: xem `git log` / tag
+- Phiên bản và nội dung từng lần cập nhật: xem `CHANGELOG.md`

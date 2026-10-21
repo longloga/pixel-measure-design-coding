@@ -11,10 +11,13 @@ Trước khi chụp, script:
     WOW) và ảnh lazy-load — KHÔNG cuộn thì các khối .fade vẫn opacity:0 và ảnh chụp bị trống,
   - chờ document.fonts.ready (tránh chụp bằng font dự phòng),
   - dừng slider (slick/swiper) ở slide đầu nếu có.
+Tải trang qua _page.open_page: chờ networkidle tối đa --settle ms rồi đi tiếp (không crash vì GTM/analytics).
 In ra scrollWidth (phát hiện tràn ngang) và chiều cao trang.
 """
-import argparse, os
+import argparse, os, sys
 from playwright.sync_api import sync_playwright
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _page import launch, open_page
 
 FREEZE_CSS = '*,*::before,*::after{transition-duration:0s!important;transition-delay:0s!important;' \
              'animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;' \
@@ -36,20 +39,21 @@ ap.add_argument('--wait', type=int, default=800)
 ap.add_argument('--no-freeze', action='store_true', help='giữ nguyên animation (khi cần chụp hiệu ứng)')
 ap.add_argument('--hover', action='append', default=[], help='selector: chụp thêm ảnh khi hover phần tử đầu tiên khớp')
 ap.add_argument('--dpr', type=float, default=1, help='device scale factor (2 để so với design @2x không cần co)')
+ap.add_argument('--settle', type=int, default=8000, help='ms tối đa chờ networkidle trước khi chụp với DOM đã sẵn sàng')
 a = ap.parse_args()
 vps = [v.split('=') for v in (a.vp or ['pc=1440', 'sp=375'])]
 os.makedirs(a.out, exist_ok=True)
-cands = ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium']
-exe = next((c for c in cands if os.path.exists(c)), None)
 with sync_playwright() as p:
-    b = p.chromium.launch(executable_path=exe) if exe else p.chromium.launch()
+    b = launch(p)
     for name, w in vps:
         ctx = b.new_context(viewport={'width': int(w), 'height': 900}, device_scale_factor=a.dpr,
                             is_mobile=int(w) < 768, has_touch=int(w) < 768)
         pg = ctx.new_page()
-        pg.goto(a.url); pg.wait_for_load_state('networkidle')
+        note = open_page(pg, a.url, a.settle)
+        if note: print(f'  ({name}) {note}')
         if not a.no_freeze: pg.add_style_tag(content=FREEZE_CSS)
         pg.evaluate(SCROLL_JS); pg.wait_for_timeout(a.wait)
+        pg.evaluate('document.fonts.ready.then(() => true)')
         sw = pg.evaluate('document.documentElement.scrollWidth')
         h = pg.evaluate('document.documentElement.scrollHeight')
         hidden = pg.evaluate('''() => [...document.querySelectorAll('body *')].filter(e => {

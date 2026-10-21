@@ -36,6 +36,7 @@ dò nhóm liên quan đến việc đang làm.
 | L-MEAS-04 | | Đo font từ dòng chỉ có kana/số → font-size nhỏ hơn thật. → Đo dòng có kanji. | |
 | L-MEAS-05 | [!] | Dùng opacity/filter để "làm nhạt" thay vì mã màu thật. → Lấy mã màu bằng `colors.py --pt/--dark`. | |
 | L-MEAS-06 | | Không tìm pattern lặp → mỗi section 1 padding riêng lệch nhau vài px. → So offset heading với đầu section ở nhiều section, gom thành 1 rule. | |
+| L-MEAS-07 | | Suy letter-spacing từ khoảng cách giữa các ký tự (pitch) → nhiễu, kết quả mâu thuẫn, mất thời gian (đã gặp thực tế). → Code với giá trị base của project trước, rồi `rowcmp.py` so **x kết thúc dòng và vị trí xuống dòng**: dòng render dài hơn/xuống sớm hơn → ls (hoặc font) lớn hơn design. Design có thể dùng ls khác nhau giữa các khối (vd mô tả STEP/list = 0, body = .05em). | rowcmp.py Δx1 |
 
 ## 3. CSS / SCSS (L-CSS)
 
@@ -105,6 +106,10 @@ dò nhóm liên quan đến việc đang làm.
 | L-SHOT-03 | | Slider tự chạy → mỗi lần chụp khác nhau, diff dao động. → `shot.py` dừng slick/swiper ở slide 0; còn khác thì `--mask` vùng đó. | |
 | L-SHOT-05 | | Trang có khối dài khác design một cách CHỦ Ý (tab cuộn hiện mọi panel, accordion mở sẵn...) → so sánh mất dấu cả phần dưới (đã gặp thực tế: lệch +2600px, cả nửa dưới bị báo sai). → `pixeldiff` tự dò lại và báo "DÒ LẠI"; xác nhận đó là chủ ý rồi đánh giá các dải sau mốc đó. | pixeldiff `resyncs` |
 | L-SHOT-04 | | So với design cũ (người dùng đã gửi bản mới / có 調整依頼書). → Xác nhận file design mới nhất và ghi đường dẫn vào ghi chú đo. | |
+| L-SHOT-06 | [!] | Trang có GTM/analytics/font CDN → chờ "load"/"networkidle" timeout 30s, script crash, chạy lại nhiều lần (đã gặp thực tế: mất ~10 phút chỉ để chụp được ảnh). → Dùng `_page.open_page` (shot/rects/audit đã dùng): chờ networkidle có hạn `--settle` rồi đi tiếp. Chạy ngoài sandbox ngay từ đầu. | shot.py/rects.py in "chưa networkidle" |
+| L-SHOT-07 | [!] | Đo vị trí khi webfont chưa tải xong → xuống dòng khác, số Δ sai cả vòng (đã gặp thực tế). → Luôn chờ `document.fonts.ready` trước khi đo/chụp; script tự viết cũng phải làm vậy. | |
+| L-SHOT-08 | [!] | Header/KV dùng chung khác design → pixeldiff lệch dây chuyền cả trang, vô dụng. → `rects.py` căn theo khối mốc trong vùng mình code; ghi tọa độ design của mọi khối 1 lần ở đầu. | rects.py |
+| L-SHOT-09 | | Compile SCSS bằng công cụ khác project (thiếu autoprefixer / khác browserslist) → file CSS khác hẳn bản cũ. → Compile ra file tạm, so kích thước + tập selector với CSS hiện có trước khi ghi đè. | |
 
 ---
 

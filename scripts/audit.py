@@ -16,6 +16,10 @@ Gồm 2 lớp:
 Tag CMS (@link(123), @page_url, {{...}}, <?php ... ?>) được coi là hợp lệ, không báo lỗi.
 Mã lỗi (E=lỗi phải sửa, W=cảnh báo nên xem, I=thông tin) dùng chung với references/lessons.md.
 Exit code 1 nếu còn E — dùng được trong vòng lặp sửa.
+
+Lỗi mạng/console của tài nguyên KHÁC domain trang (GTM, analytics, font CDN bị CORS khi chạy localhost...)
+vẫn được báo nhưng ở mức W với hậu tố -EXT (không làm exit 1). `--strict-external` để coi chúng là E như cũ.
+Trang chờ networkidle tối đa --settle ms rồi kiểm tra tiếp (báo I LOAD-SLOW) thay vì lỗi timeout.
 """
 import argparse, json, os, re, sys
 from collections import Counter
@@ -193,23 +197,46 @@ RUNTIME_JS = r"""
 """
 
 
-def runtime_audit(urls, vps, wait):
+SETTLE_MS = 8000
+URL_RE = re.compile(r'https?://[^\s\'"]+')
+
+
+def make_classifier(page_url, strict):
+    host = urlparse(page_url).netloc
+
+    def lv_code(code, *urls):
+        ext = [u for u in urls if u and not u.startswith('data:') and urlparse(u).netloc and urlparse(u).netloc != host]
+        if ext and len(ext) == len([u for u in urls if u]) and not strict:
+            return 'W', code + '-EXT'
+        return 'E', code
+
+    def console(m):
+        if m.type != 'error': return None
+        loc = (m.location or {}).get('url', '')
+        urls = URL_RE.findall(m.text) or [loc]
+        return lv_code('JS-CONSOLE', *urls[:1])
+    return lv_code, console
+
+
+def runtime_audit(urls, vps, wait, strict=False):
     from playwright.sync_api import sync_playwright
-    cands = ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium']
-    exe = next((c for c in cands if os.path.exists(c)), None)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from _page import launch, open_page
     res = {}
     with sync_playwright() as p:
-        b = p.chromium.launch(executable_path=exe) if exe else p.chromium.launch()
+        b = launch(p)
         for name, url in urls:
             for vn, w in vps:
                 pg = b.new_page(viewport={'width': int(w), 'height': 900})
                 errs = []
-                pg.on('console', lambda m: errs.append(('E', 'JS-CONSOLE', m.text[:200])) if m.type == 'error' else None)
+                lv_code, console_lv = make_classifier(url, strict)
+                pg.on('console', lambda m: errs.append((*console_lv(m), m.text[:200])) if m.type == 'error' else None)
                 pg.on('pageerror', lambda e: errs.append(('E', 'JS-ERROR', str(e)[:200])))
-                pg.on('response', lambda r: errs.append(('E', 'HTTP-404', f'{r.status} {r.url[-120:]}')) if r.status >= 400 else None)
-                pg.on('requestfailed', lambda r: errs.append(('E', 'HTTP-FAIL', f'{r.failure} {r.url[-120:]}')) if not r.url.startswith('data:') else None)
+                pg.on('response', lambda r: errs.append((*lv_code('HTTP-404', r.url), f'{r.status} {r.url[-120:]}')) if r.status >= 400 else None)
+                pg.on('requestfailed', lambda r: errs.append((*lv_code('HTTP-FAIL', r.url), f'{r.failure} {r.url[-120:]}')) if not r.url.startswith('data:') else None)
                 try:
-                    pg.goto(url, wait_until='networkidle', timeout=30000)
+                    note = open_page(pg, url, settle_ms=SETTLE_MS)
+                    if note: errs.append(('I', 'LOAD-SLOW', note))
                 except Exception as e:
                     errs.append(('E', 'LOAD', str(e)[:200]))
                 # cuộn hết trang để kích hoạt lazy-load / inview animation
@@ -234,7 +261,11 @@ def main():
     ap.add_argument('--json', help='ghi kết quả JSON (metrics.py đọc được)')
     ap.add_argument('--max-same', type=int, default=3, help='mỗi mã W/I chỉ in tối đa N dòng')
     ap.add_argument('--quiet-info', action='store_true', help='ẩn mục I')
+    ap.add_argument('--strict-external', action='store_true', help='lỗi tài nguyên khác domain vẫn tính E (hành vi cũ)')
+    ap.add_argument('--settle', type=int, default=8000, help='ms tối đa chờ networkidle')
     a = ap.parse_args()
+    global SETTLE_MS
+    SETTLE_MS = a.settle
     root = os.path.abspath(a.root)
     vps = [v.split('=') for v in (a.vp or ['pc=1440', 'tb=1024', 'sp=375'])]
     report = {}
@@ -242,7 +273,7 @@ def main():
         report[(pg, 'static')] = [(lv, c, f'L{ln} {m}' if ln else m) for lv, c, ln, m in static_audit(pg, root)]
     if not a.static_only:
         urls = [(pg, (a.base.rstrip('/') + '/' + os.path.relpath(os.path.abspath(pg), root)) if a.base else 'file://' + os.path.abspath(pg)) for pg in a.pages]
-        report.update(runtime_audit(urls, vps, a.wait))
+        report.update(runtime_audit(urls, vps, a.wait, a.strict_external))
     total = Counter()
     for (pg, where), items in report.items():
         seen, rows = set(), []
