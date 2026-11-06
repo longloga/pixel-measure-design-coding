@@ -67,6 +67,8 @@ Claude は結果を数値の表（セクションごとのズレ、audit のエ�
 | `scripts/pixeldiff.py` | デザイン ↔ 実装の自動比較、ヒートマップ出力 |
 | `scripts/audit.py` | HTML・レスポンシブ（横スクロール）・リンク切れ／画像切れ・フォント・JS エラーのチェック |
 | `scripts/metrics.py` | 作業時間・修正ループ回数・修正依頼回数の記録（データは各自の PC にのみ保存） |
+| `scripts/xdpos.py`, `inkcmp.py` | XD/Figma の枠・文字位置と DOM の縦位置比較（Δloc）／デザイン画像と描画のインク行 top→top 比較（マージン誤差を px で表示） |
+| `scripts/refcheck.py` | 補助画像（追従・固定バー・状態違い）をメインデザイン内で位置合わせし、補助画像にしかない内容を検出 |
 | `scripts/rects.py`, `rowcmp.py` | ブロックごとの座標・テキスト行ごとのデザイン比較（共通ヘッダー・KV がデザインと異なる場合） |
 | `CHANGELOG.md`, `scripts/changelog.py` | スキルの更新履歴：変更内容・理由・更新前後の比較（本文はベトナム語） |
 

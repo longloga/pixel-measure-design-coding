@@ -3,7 +3,9 @@
 Gồm 2 lớp:
   1. Tĩnh (đọc file): thẻ không đóng/đóng sai, id trùng, img thiếu alt/src, file ảnh/CSS/JS/link nội bộ
      không tồn tại, url() trong CSS hỏng, target=_blank thiếu rel, <a> lồng nhau, thứ tự heading,
-     href="#" còn sót, tel:/mailto: sai.
+     href="#" còn sót, tel:/mailto: sai; semantic (SEM-*/FORM-*): h1 ngoài <main>, <section> không heading,
+     aria-label trên div/span không role, <small> trong heading, input không label/autocomplete,
+     <th> thiếu scope, <picture><source> khác tỉ lệ ảnh mà thiếu width/height (CLS).
   2. Runtime (Playwright, nhiều viewport): tràn ngang + phần tử gây tràn, ảnh lỗi, request 404,
      lỗi console/JS, font web chưa load (rơi về font hệ thống), chữ bị cắt (overflow hidden),
      chữ < 12px ở SP, vùng chạm < 32px ở SP, phần tử bị che/ra ngoài viewport.
@@ -12,6 +14,9 @@ Gồm 2 lớp:
   python3 audit.py *.html --vp pc=1440 --vp sp=375 --json out/audit.json
   python3 audit.py index.html --static-only
   python3 audit.py index.html --base http://localhost:8080/   # trang dùng path gốc "/data/..."
+  python3 audit.py index.html --base http://localhost:8080/ --spec spec.json --ab "TOP_PC=1280x740" --ab "TOP_SP=375x740"
+      → thêm vị trí khung/chữ theo XD/Figma (xdpos.py): khung lệch = E XD-POS, chữ lệch = W XD-POS-TEXT
+  Static còn có W CSS-CLASS-CLASH: class 1 từ vừa là component cấp gốc vừa là element trong component khác (L-CSS-10).
 
 Tag CMS (@link(123), @page_url, {{...}}, <?php ... ?>) được coi là hợp lệ, không báo lỗi.
 Mã lỗi (E=lỗi phải sửa, W=cảnh báo nên xem, I=thông tin) dùng chung với references/lessons.md.
@@ -41,6 +46,11 @@ class Parser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.stack, self.issues, self.ids, self.refs, self.heads = [], [], Counter(), [], []
         self.a_depth = 0
+        self.sections, self.pictures, self.labels_for, self.fields = [], [], set(), []
+        self.has_main = False
+
+    def open_tags(self):
+        return [t for t, _ in self.stack]
 
     def add(self, lv, code, msg):
         self.issues.append((lv, code, self.getpos()[0], msg))
@@ -52,6 +62,7 @@ class Parser(HTMLParser):
                 self.stack.pop()
             self.stack.append((tag, self.getpos()[0]))
         if 'id' in at and at['id']: self.ids[at['id']] += 1
+        self.semantic(tag, at)
         if tag == 'a':
             if self.a_depth: self.add('E', 'HTML-NESTED-A', '<a> lồng trong <a>')
             self.a_depth += 1
@@ -67,7 +78,7 @@ class Parser(HTMLParser):
             if 'alt' not in at: self.add('E', 'IMG-ALT', f'img thiếu alt: {at.get("src")}')
             if not at.get('src'): self.add('E', 'IMG-SRC', 'img thiếu src')
             else: self.refs.append(('img', at['src'], self.getpos()[0]))
-            if not ('width' in at and 'height' in at): self.add('I', 'IMG-SIZE', f'img không có width/height (CLS): {at.get("src")}')
+            if not ('width' in at and 'height' in at): self.add('I', 'IMG-SIZE', f'img không có width/height — CSS phải giữ chỗ (aspect-ratio / khung cố định), xem L-HTML-09: {at.get("src")}')
         if tag == 'source' and at.get('srcset'):
             self.refs.append(('img', at['srcset'].split(',')[0].split()[0], self.getpos()[0]))
         if tag == 'link' and at.get('href') and 'stylesheet' in (at.get('rel') or ''): self.refs.append(('css', at['href'], self.getpos()[0]))
@@ -76,6 +87,27 @@ class Parser(HTMLParser):
         if 'style' in at and at['style'] and re.search(r'url\(', at['style']):
             for u in re.findall(r'url\(["\']?([^"\')]+)', at['style']): self.refs.append(('img', u, self.getpos()[0]))
 
+    def semantic(self, tag, at):
+        ln, opened = self.getpos()[0], self.open_tags()[:-1] if tag not in VOID else self.open_tags()
+        if tag == 'main': self.has_main = True
+        if tag in ('div', 'span', 'p') and ('aria-label' in at or 'aria-labelledby' in at) and 'role' not in at:
+            self.add('W', 'SEM-ARIA-GENERIC', f'aria-label trên <{tag}> không có role (bị bỏ qua) — dùng <section>/<nav>/<aside> hoặc bỏ')
+        if tag == 'section': self.sections.append([ln, False, 'aria-label' in at or 'aria-labelledby' in at])
+        if re.fullmatch(r'h[1-6]', tag):
+            if self.sections: self.sections[-1][1] = True
+            if tag == 'h1' and 'main' not in opened: self.add('W', 'SEM-H1-OUTSIDE-MAIN', '<h1> nằm ngoài <main> (skip-link bỏ qua tiêu đề trang)')
+        if tag == 'small' and any(re.fullmatch(r'h[1-6]', t) for t in opened):
+            self.add('W', 'SEM-SMALL-STYLE', '<small> trong heading — <small> là chú thích phụ; chữ nhỏ để trang trí dùng <span class>')
+        if tag == 'th' and 'scope' not in at: self.add('I', 'SEM-TH-SCOPE', '<th> thiếu scope="row|col"')
+        if tag == 'label' and at.get('for'): self.labels_for.add(at['for'])
+        if tag in ('input', 'select', 'textarea') and at.get('type') not in ('hidden', 'submit', 'button', 'reset', 'image'):
+            self.fields.append((ln, tag, at, 'label' in opened))
+        if tag == 'picture': self.pictures.append({'ln': ln, 'sources': [], 'img': None})
+        if tag == 'source' and 'picture' in opened and self.pictures and at.get('srcset'):
+            self.pictures[-1]['sources'].append((at['srcset'].split(',')[0].split()[0], 'width' in at and 'height' in at))
+        if tag == 'img' and 'picture' in opened and self.pictures:
+            self.pictures[-1]['img'] = (at.get('src'), at.get('width'), at.get('height'))
+
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
         if tag not in VOID and self.stack and self.stack[-1][0] == tag: self.stack.pop()
@@ -83,6 +115,9 @@ class Parser(HTMLParser):
     def handle_endtag(self, tag):
         if tag in VOID: return
         if tag == 'a': self.a_depth = max(0, self.a_depth - 1)
+        if tag == 'section' and self.sections:
+            ln, has_head, labelled = self.sections.pop()
+            if not has_head and not labelled: self.add('W', 'SEM-SECTION-NOHEAD', f'<section> (dòng {ln}) không có heading — dùng <div> hoặc thêm heading')
         names = [t for t, _ in self.stack]
         if tag not in names:
             self.add('E', 'HTML-STRAY-CLOSE', f'</{tag}> không có thẻ mở tương ứng'); return
@@ -103,6 +138,33 @@ def resolve(page, u, base_dir):
     return f
 
 
+def picture_ratio_issues(page, root, pictures):
+    """<source> có ảnh khác tỉ lệ với <img> mà không ghi width/height → trình duyệt giữ chỗ theo tỉ lệ img → nhảy layout."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return []
+    def ratio(u):
+        f = resolve(page, u, root)
+        if not f or not os.path.exists(f): return None
+        try:
+            w, h = Image.open(f).size
+            return w / h
+        except Exception:
+            return None
+    out = []
+    for pic in pictures:
+        if not pic['img'] or not pic['img'][0]: continue
+        src, w, h = pic['img']
+        base = (float(w) / float(h)) if (w and h and w.replace('.', '').isdigit() and h.replace('.', '').isdigit()) else ratio(src)
+        if not base: continue
+        for s, has_dim in pic['sources']:
+            r = ratio(s)
+            if r and not has_dim and abs(r - base) / base > 0.02:
+                out.append(('W', 'SOURCE-SIZE', pic['ln'], f'<source> {s} khác tỉ lệ ảnh img ({r:.2f} vs {base:.2f}) — thêm width/height cho <source> (CLS)'))
+    return out
+
+
 def static_audit(page, root):
     src = open(page, encoding='utf-8', errors='replace').read()
     P = Parser(); P.feed(src); P.close()
@@ -116,6 +178,15 @@ def static_audit(page, root):
         if prev and lv > prev + 1: out.append(('W', 'HTML-HEADING-SKIP', ln, f'h{prev} → h{lv} (nhảy cấp)'))
         prev = lv
     if sum(1 for lv, _ in P.heads if lv == 1) > 1: out.append(('W', 'HTML-MULTI-H1', 0, 'nhiều hơn 1 <h1>'))
+    if not any(lv == 1 for lv, _ in P.heads): out.append(('W', 'SEM-NO-H1', 0, 'trang không có <h1>'))
+    if not P.has_main: out.append(('W', 'SEM-NO-MAIN', 0, 'trang không có <main>'))
+    for ln, tag, at, wrapped in P.fields:
+        if not (wrapped or (at.get('id') and at['id'] in P.labels_for) or 'aria-label' in at or 'aria-labelledby' in at):
+            out.append(('W', 'FORM-LABEL', ln, f'<{tag} name="{at.get("name")}"> không có <label> liên kết'))
+        nm = (at.get('name') or '').lower()
+        if tag == 'input' and 'autocomplete' not in at and (at.get('type') in ('email', 'tel') or nm in ('name', 'email', 'tel', 'zip', 'address')):
+            out.append(('I', 'FORM-AUTOCOMPLETE', ln, f'input name="{at.get("name")}" nên có autocomplete'))
+    out += picture_ratio_issues(page, root, P.pictures)
     if not re.search(r'<meta[^>]+name=["\']viewport', src, re.I): out.append(('E', 'RESP-VIEWPORT', 0, 'thiếu <meta name="viewport">'))
     if re.search(r'\sstyle="[^"]*(?:width|margin|padding|font-size)\s*:', src): out.append(('I', 'CSS-INLINE', 0, 'có style inline về kích thước — nên chuyển vào SCSS'))
     css_files = []
@@ -127,11 +198,55 @@ def static_audit(page, root):
             code = {'img': 'IMG-MISSING', 'css': 'FILE-MISSING', 'js': 'FILE-MISSING', 'a': 'LINK-BROKEN'}[kind]
             out.append(('E', code, ln, f'không tìm thấy {u}'))
         elif kind == 'css': css_files.append(f)
+    out += class_clash_issues(src, css_files)
     for cf in css_files:
         css = open(cf, encoding='utf-8', errors='replace').read()
         for u in sorted(set(re.findall(r'url\(\s*["\']?([^"\')]+)', css))):
             f = resolve(cf, u, root)
             if f and not os.path.exists(f): out.append(('E', 'CSS-URL-MISSING', 0, f'{os.path.relpath(cf, root)}: url({u}) không tồn tại'))
+    return out
+
+
+LAYOUT_UTIL = set('container inner wrap wrapper row col clearfix cf pc tb sp xs sr-only visually-hidden'.split())
+SEL_RULE = re.compile(r'([^{}]+)\{[^{}]*\}')
+LAST_CLASS = re.compile(r'(?:^|[\s>+~])\.([A-Za-z][\w-]*)$')
+
+
+def split_top(group):
+    """Tách selector theo dấu phẩy CẤP NGOÀI (bỏ qua phẩy trong :not(...), :is(...))."""
+    out, depth, cur = [], 0, ''
+    for ch in group:
+        if ch == '(': depth += 1
+        elif ch == ')': depth -= 1
+        if ch == ',' and depth == 0: out.append(cur); cur = ''
+        else: cur += ch
+    return out + [cur]
+
+
+def class_clash_issues(html, css_files):
+    """L-CSS-10: class vừa có rule CẤP GỐC (`.tag{}` = component dùng chung) vừa được dùng làm element trong
+    component khác (`.step-box .tag{}`) → element kế thừa ngầm width/padding/font của component chung."""
+    used = set(c for v in re.findall(r'class="([^"]*)"', html) for c in v.split())
+    roots, owners = set(), {}
+    for cf in css_files:
+        css = re.sub(r'/\*.*?\*/', '', open(cf, encoding='utf-8', errors='replace').read(), flags=re.S)
+        for sel_group in SEL_RULE.findall(css):
+            for sel in split_top(sel_group):
+                sel = sel.strip()
+                if not sel or sel.startswith('@'): continue
+                m = re.fullmatch(r'\.([A-Za-z][\w-]*)', sel)
+                if m: roots.add(m.group(1)); continue
+                m = LAST_CLASS.search(sel)
+                if m and re.search(r'[\s>+~]', sel):
+                    parent = re.split(r'[\s>+~]+', sel.strip())[-2] if len(re.split(r'[\s>+~]+', sel.strip())) > 1 else ''
+                    owners.setdefault(m.group(1), set()).add(parent)
+    out = []
+    for c in sorted(roots & set(owners) & used):
+        if '-' in c or c in LAYOUT_UTIL: continue  # tên 2 từ = component riêng (RSCSS); tiện ích layout dùng chung có chủ ý
+        ps = sorted(p for p in owners[c] if p and p != '.' + c)[:3]
+        if ps:
+            out.append(('W', 'CSS-CLASS-CLASH', 0, f'.{c} là component cấp gốc (.{c}{{}}) nhưng cũng dùng làm element trong {", ".join(ps)} '
+                        f'→ kế thừa ngầm style chung (L-CSS-10); chủ ý override thì bỏ qua, không thì đổi tên'))
     return out
 
 
@@ -162,7 +277,8 @@ RUNTIME_JS = r"""
       out.push(['E', 'IMG-BROKEN', `ảnh không load: ${img.getAttribute('src')}`]);
     else if (img.naturalWidth && visible(img)) {
       const r = img.getBoundingClientRect(), dpr = opt.sp ? 2 : 1;
-      if (img.naturalWidth < r.width * dpr * 0.75 && r.width > 80)
+      // SVG là vector: naturalWidth chỉ là kích thước khai báo, không mờ khi phóng
+      if (!/\.svg(\?|#|$)/i.test(img.currentSrc || img.getAttribute('src') || '') && img.naturalWidth < r.width * dpr * 0.75 && r.width > 80)
         out.push(['W', 'IMG-LOWRES', `${img.getAttribute('src')} hiển thị ${r.width.toFixed(0)}px nhưng ảnh gốc ${img.naturalWidth}px (mờ ở retina)`]);
       const cs = getComputedStyle(img);
       if (cs.objectFit === 'fill' && Math.abs(img.naturalWidth / img.naturalHeight - r.width / r.height) > 0.03 && r.height > 20)
@@ -175,6 +291,8 @@ RUNTIME_JS = r"""
     const cs = getComputedStyle(el);
     const hasText = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
     if (!hasText) return;
+    // ẩn có chủ ý cho trình đọc màn hình (.sr-only / visually-hidden: khung 1x1px + clip) → không phải lỗi
+    if (el.clientWidth <= 1 && el.clientHeight <= 1) return;
     if ((cs.overflow === 'hidden' || cs.overflowX === 'hidden') && cs.textOverflow !== 'ellipsis' && !cs.webkitLineClamp?.match?.(/\d/)
         && (el.scrollWidth > el.clientWidth + 2 || el.scrollHeight > el.clientHeight + 2))
       out.push(['W', 'TEXT-CLIPPED', `${label(el)} chữ bị cắt (${el.scrollWidth}x${el.scrollHeight} > ${el.clientWidth}x${el.clientHeight})`]);
@@ -250,6 +368,27 @@ def runtime_audit(urls, vps, wait, strict=False):
     return res
 
 
+def xdpos_issues(url, spec, ab, tol, settle):
+    """Chạy xdpos.py: khung lệch (B) = E vì shape↔DOM khớp chính xác; chữ lệch (T) = W vì tâm chữ còn nhiễu metric font."""
+    import subprocess, tempfile
+    name, _, vp = ab.partition('=')
+    vp = vp or '1280x740'
+    tmp = tempfile.NamedTemporaryFile(suffix='.json', delete=False).name
+    cmd = [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xdpos.py'), url, spec,
+           '--ab', name, '--vp', vp, '--tol', str(tol), '--json', tmp, '--settle', str(settle)]
+    if int(vp.split('x')[0]) < 768: cmd.append('--mobile')
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    try: d = json.load(open(tmp))
+    except Exception: return [('E', 'XD-POS-FAIL', f'xdpos.py lỗi: {(r.stderr or r.stdout)[-300:]}')]
+    out = []
+    for it in d['items']:
+        if abs(it['loc']) <= tol + 0.5: continue
+        lv, code = ('E', 'XD-POS') if it['kind'] == 'B' else ('W', 'XD-POS-TEXT')
+        out.append((lv, code, f"y{it['y']:.0f} {it['el']} «{it['name']}» Δloc {it['loc']:+.0f}px (dy {it['dy']:+.0f}) → margin/padding ngay trên nó"))
+    if d.get('wrong'): out.append(('I', 'XD-POS-SKIP', f"{len(d['wrong'])} mục lệch > 60px bị bỏ (ghép nhầm / khác chủ ý)"))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('pages', nargs='+')
@@ -263,6 +402,9 @@ def main():
     ap.add_argument('--quiet-info', action='store_true', help='ẩn mục I')
     ap.add_argument('--strict-external', action='store_true', help='lỗi tài nguyên khác domain vẫn tính E (hành vi cũ)')
     ap.add_argument('--settle', type=int, default=8000, help='ms tối đa chờ networkidle')
+    ap.add_argument('--spec', help='spec.json từ xdspec.py/figspec.py → chạy xdpos.py (vị trí khung/chữ, L-MEAS-15)')
+    ap.add_argument('--ab', action='append', default=[], help='artboard=WxH cho --spec, vd "TOP_PC=1280x740" (lặp lại cho SP)')
+    ap.add_argument('--pos-tol', type=float, default=2, help='ngưỡng Δloc px cho --spec')
     a = ap.parse_args()
     global SETTLE_MS
     SETTLE_MS = a.settle
@@ -274,6 +416,10 @@ def main():
     if not a.static_only:
         urls = [(pg, (a.base.rstrip('/') + '/' + os.path.relpath(os.path.abspath(pg), root)) if a.base else 'file://' + os.path.abspath(pg)) for pg in a.pages]
         report.update(runtime_audit(urls, vps, a.wait, a.strict_external))
+        if a.spec:
+            for pg, url in urls:
+                for ab in a.ab:
+                    report[(pg, 'xdpos ' + ab)] = xdpos_issues(url, a.spec, ab, a.pos_tol, a.settle)
     total = Counter()
     for (pg, where), items in report.items():
         seen, rows = set(), []

@@ -13,7 +13,7 @@ Dữ liệu dùng chung mọi dự án: <skill>/metrics/runs.jsonl (mỗi dòng 
   python3 metrics.py report                         # bảng tất cả run + bài học tái phạm nhiều nhất
   python3 metrics.py report --project my-project --csv out.csv
 """
-import argparse, json, os, sys, time
+import argparse, glob, json, os, sys, time
 from collections import Counter, defaultdict
 from datetime import datetime
 
@@ -56,28 +56,49 @@ def events():
     return [json.loads(l) for l in open(LOG) if l.strip()]
 
 
+STALE_H = 12  # run không có sự kiện mới quá 12h mà chưa `end` → coi là bỏ dở
+
+
+def find_sources(days=60, near_days=14):
+    """L-MEAS-11: tìm file nguồn XD/Figma. Trả (trong dự án ≤3 cấp, ở Desktop/Downloads sửa trong near_days ngày)."""
+    now_ = time.time()
+    proj = {p for d in range(4) for ext in ('xd', 'fig')
+            for p in glob.glob(os.path.join(os.getcwd(), *(['*'] * d), f'*.{ext}')) if os.path.getmtime(p) > now_ - days * 86400}
+    near = {p for base in ('~/Desktop', '~/Downloads') for ext in ('xd', 'fig')
+            for p in glob.glob(os.path.join(os.path.expanduser(base), f'*.{ext}')) if os.path.getmtime(p) > now_ - near_days * 86400}
+    key = lambda p: -os.path.getmtime(p)
+    return sorted(proj, key=key), sorted(near - proj, key=key)
+
+
 def summarize():
     runs = defaultdict(lambda: {'iters': [], 'fix_user': [], 'fix_self': [], 'fix_after': [], 'reviews': []})
     for e in events():
-        r = runs[e['run']]; t = e['type']
+        r = runs[e['run']]; t = e['type']; r['last'] = e['ts']
         if t == 'start': r.update(start=e['ts'], project=e['project'], page=e['page'], source=e.get('source'), note=e.get('note'))
         elif t == 'iter': r['iters'].append(e)
         elif t == 'fix':
             key = 'fix_after' if e.get('after') else ('fix_user' if e['by'] == 'user' else 'fix_self')
             r[key].append(e)
-        elif t == 'end': r['end'] = e['ts']; r['active_min'] = e.get('active_min')
+        elif t == 'end': r['end'] = e['ts']; r['active_min'] = e.get('active_min'); r['abandoned'] = e.get('abandoned', False)
         elif t == 'review': r['reviews'].append(e)
     out = []
     for rid, r in runs.items():
         if 'start' not in r: continue
         st = datetime.fromisoformat(r['start']); en = datetime.fromisoformat(r['end']) if r.get('end') else None
+        last_ts = datetime.fromisoformat(r['last'])
+        if en is None and (datetime.now() - last_ts).total_seconds() > STALE_H * 3600:
+            en = last_ts; r['abandoned'] = True          # bỏ dở: tính tới sự kiện cuối, không tới hiện tại
+        if r.get('abandoned') and r.get('end'):
+            en = min(en, last_ts) if en else last_ts
         last = r['iters'][-1] if r['iters'] else {}
         out.append({
             'run': rid, 'project': r['project'], 'page': r['page'], 'source': r.get('source'), 'start': r['start'][:16],
             'minutes': round(((en or datetime.now()) - st).total_seconds() / 60),
-            'active_min': r.get('active_min'), 'done': bool(en),
+            'active_min': r.get('active_min'), 'done': bool(en), 'abandoned': bool(r.get('abandoned')),
             'iterations': len(r['iters']),
             'user_fixes': len(r['fix_user']), 'self_fixes': len(r['fix_self']), 'bugs_after': len(r['fix_after']),
+            # mọi lần NGƯỜI DÙNG yêu cầu sửa (trước + sau giao) — trước đây chỉ đếm trước giao nên luôn ≈ 0
+            'user_req': len(r['fix_user']) + sum(1 for x in r['fix_after'] if x.get('by') == 'user'),
             'max_delta': last.get('max_abs_delta'), 'mean_diff': last.get('mean_diff_pct'),
             'audit_E': last.get('audit_E'), 'audit_W': last.get('audit_W'),
             'review': r['reviews'][-1]['score'] if r['reviews'] else None,
@@ -91,6 +112,7 @@ def main():
     ap = argparse.ArgumentParser(); sub = ap.add_subparsers(dest='cmd', required=True)
     s = sub.add_parser('start'); s.add_argument('--page', required=True); s.add_argument('--project', default=os.path.basename(os.getcwd()))
     s.add_argument('--source', choices=['png', 'xd', 'figma', 'other'], default='png'); s.add_argument('--note', default='')
+    s.add_argument('--no-source-check', action='store_true', help='bỏ cảnh báo L-MEAS-11 (đã xác nhận không có file nguồn dùng được)')
     i = sub.add_parser('iter'); i.add_argument('--pixeldiff', action='append', default=[]); i.add_argument('--audit'); i.add_argument('--note', default='')
     f = sub.add_parser('fix'); f.add_argument('--by', choices=['user', 'self'], required=True); f.add_argument('--lesson', default='')
     f.add_argument('--after', action='store_true', help='lỗi phát hiện SAU khi đã giao'); f.add_argument('--note', default='')
@@ -102,6 +124,20 @@ def main():
     a = ap.parse_args()
 
     if a.cmd == 'start':
+        old = load_cur()
+        if old:
+            last = max((x['ts'] for x in events() if x['run'] == old), default=now())
+            if not any(x['run'] == old and x['type'] == 'end' for x in events()):
+                emit({'run': old, 'type': 'end', 'deliver': False, 'abandoned': True, 'ts': last})
+                print(f'! run cũ {old} chưa end → tự đóng (bỏ dở) tại {last[:16]}')
+        if a.source in ('png', 'other') and not a.no_source_check:
+            proj, near = find_sources()
+            if proj or near:
+                print('!! L-MEAS-11: có file nguồn XD/Figma — HỎI người dùng file nào là design của trang này; có thì lấy spec bằng')
+                print('   xdspec.py / figspec.py và start lại với --source xd|figma, KHÔNG đo từ ảnh.')
+                for p in proj[:5]: print(f'   [trong dự án] {p}')
+                for p in near[:5]: print(f'   [{datetime.fromtimestamp(os.path.getmtime(p)):%m-%d}] {p}')
+                print('   (đã xác nhận không dùng được → chạy lại với --no-source-check, ghi lý do vào --note)')
         rid = f'{a.project}/{a.page}/{datetime.now():%Y%m%d-%H%M}'
         emit({'run': rid, 'type': 'start', 'project': a.project, 'page': a.page, 'source': a.source, 'note': a.note, 'cwd': os.getcwd()})
         save_cur(rid); print('run:', rid)
@@ -131,15 +167,22 @@ def main():
     elif a.cmd == 'report':
         rows = [x for x in summarize() if not a.project or x['project'] == a.project][-a.last:]
         if not rows: print('Chưa có dữ liệu.'); return
-        cols = ['start', 'project', 'page', 'minutes', 'iterations', 'user_fixes', 'self_fixes', 'bugs_after', 'first_diff', 'mean_diff', 'max_delta', 'audit_E', 'review']
+        cols = ['start', 'project', 'page', 'minutes', 'iterations', 'user_req', 'bugs_after', 'self_fixes', 'first_diff', 'mean_diff', 'max_delta', 'audit_E', 'review']
         w = {c: max(len(c), *(len(str(x[c])) for x in rows)) for c in cols}
         print('  '.join(c.ljust(w[c]) for c in cols))
-        for x in rows: print('  '.join(str(x[c] if x[c] is not None else '-').ljust(w[c]) for c in cols) + ('' if x['done'] else '  (đang làm)'))
-        done = [x for x in rows if x['done']]
+        for x in rows: print('  '.join(str(x[c] if x[c] is not None else '-').ljust(w[c]) for c in cols)
+                             + ('  (bỏ dở)' if x['abandoned'] else '' if x['done'] else '  (đang làm)'))
+        done = [x for x in rows if x['done'] and not x['abandoned']]
         if done:
-            avg = lambda k: round(sum(x[k] or 0 for x in done) / len(done), 1)
-            print(f'\nTB {len(done)} run xong: {avg("minutes")} phút, {avg("iterations")} vòng, {avg("user_fixes")} lần bị yêu cầu sửa, '
-                  f'{avg("bugs_after")} lỗi sau giao, review {avg("review")}/5')
+            def avg(k):
+                v = [x[k] for x in done if x[k] is not None]
+                return round(sum(v) / len(v), 1) if v else '-'
+            nrev = sum(1 for x in done if x['review'] is not None)
+            print(f'\nTB {len(done)} run xong (bỏ {sum(x["abandoned"] for x in rows)} run bỏ dở): {avg("minutes")} phút, {avg("iterations")} vòng, '
+                  f'{avg("user_req")} lần người dùng yêu cầu sửa (trong đó {avg("bugs_after")} sau giao), '
+                  f'review {avg("review")}/5 ({nrev} run có chấm)')
+            if nrev < len(done) / 2:
+                print('  ! dưới nửa số run có điểm review → sau mỗi lần giao hỏi người dùng 1–5 rồi `metrics.py review --score N`')
         lc = Counter(l for x in rows for l in x['lessons'])
         if lc:
             print('\nBài học bị vi phạm nhiều nhất (ưu tiên đưa vào kiểm tra tự động / nhắc trong SKILL.md):')

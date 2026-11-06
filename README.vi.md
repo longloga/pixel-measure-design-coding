@@ -67,6 +67,8 @@ Claude sẽ báo kết quả bằng bảng số (độ lệch từng section, s�
 | `scripts/pixeldiff.py` | So sánh design ↔ render tự động, xuất heatmap |
 | `scripts/audit.py` | Kiểm tra HTML, responsive (tràn ngang), link/ảnh hỏng, font, lỗi JS |
 | `scripts/metrics.py` | Ghi thời gian, số vòng sửa, số lần bị yêu cầu sửa (dữ liệu lưu ở máy mỗi người) |
+| `scripts/xdpos.py`, `inkcmp.py` | So vị trí dọc khung + chữ XD/Figma ↔ DOM (Δloc) / so dòng mực top→top ảnh design ↔ render (px margin cần sửa) |
+| `scripts/refcheck.py` | Dò vị trí ảnh phụ (追従, thanh cố định, trạng thái) trong design chính, chỉ ra nội dung chỉ có ở ảnh phụ |
 | `scripts/rects.py`, `rowcmp.py` | So tọa độ từng khối / từng dòng chữ với design (khi header, KV dùng chung khác design) |
 | `CHANGELOG.md`, `scripts/changelog.py` | Lịch sử cập nhật skill: thay đổi gì, vì sao, so sánh trước/sau |
 

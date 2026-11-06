@@ -3,6 +3,8 @@
 (Không dùng `chrome --headless --window-size=375`: Chrome có độ rộng cửa sổ tối thiểu ~500px nên SP sai.)
 
   python3 shot.py file:///path/index.html --out shots/ --vp pc=1440 --vp sp=375
+  python3 shot.py URL --vp pc=1400x675   # WxH: đặt chiều cao viewport (phần tử 100vh như KV full màn hình
+                                         # sẽ cao bằng design khi H = toạ độ đáy KV trên design)
   python3 shot.py http://localhost:8080/index.html --out shots/ --hover ".btn"   # chụp thêm trạng thái hover
 
 Trước khi chụp, script:
@@ -34,7 +36,7 @@ SCROLL_JS = '''async () => {
 
 ap = argparse.ArgumentParser()
 ap.add_argument('url'); ap.add_argument('--out', default='.')
-ap.add_argument('--vp', action='append', default=None, help='name=width')
+ap.add_argument('--vp', action='append', default=None, help='name=width hoặc name=WIDTHxHEIGHT (mặc định cao 900)')
 ap.add_argument('--wait', type=int, default=800)
 ap.add_argument('--no-freeze', action='store_true', help='giữ nguyên animation (khi cần chụp hiệu ứng)')
 ap.add_argument('--hover', action='append', default=[], help='selector: chụp thêm ảnh khi hover phần tử đầu tiên khớp')
@@ -46,7 +48,8 @@ os.makedirs(a.out, exist_ok=True)
 with sync_playwright() as p:
     b = launch(p)
     for name, w in vps:
-        ctx = b.new_context(viewport={'width': int(w), 'height': 900}, device_scale_factor=a.dpr,
+        w, _, vh = w.partition('x'); vh = int(vh) if vh else 900
+        ctx = b.new_context(viewport={'width': int(w), 'height': vh}, device_scale_factor=a.dpr,
                             is_mobile=int(w) < 768, has_touch=int(w) < 768)
         pg = ctx.new_page()
         note = open_page(pg, a.url, a.settle)

@@ -18,6 +18,16 @@ Tất cả đơn vị là CSS px (đã chia scale).
   nếu ví dụ 66 với line-height 36 → `p + p { margin-top: 30px }`.
 - Vị trí box từ vị trí mực: `box_top ≈ ink_top - (line-height - ink_height) / 2`.
 
+## Toạ độ chữ từ XD/Figma (xdspec/figspec) và so vị trí
+
+- `y` của 1 đoạn chữ trong spec = mép trên **em-box** của dòng đầu (kiểm thực tế: chữ 13px y=5886 nằm giữa tag
+  y=5882 h20 → tâm 5892.5 ≈ tâm tag 5892). → **tâm dòng đầu = y + size/2**, không phụ thuộc line-height.
+- Trên DOM, tâm dòng đầu = tâm rect của dòng đầu text node (Range.getClientRects()[0]). Chênh 2 tâm = dy.
+  Metric font làm tâm DOM lệch sẵn ~±2px (Shippori cỡ lớn tới -4px) → so **Δ giữa các chữ liên tiếp** (Δloc), không
+  so dy tuyệt đối; xác nhận bằng mực (`inkcmp.py`). Công cụ: `xdpos.py`.
+- Khoảng cách cần sửa = Δloc (top→top), KHÔNG dùng hiệu `gap` của mực: chữ số/ảnh render cao thấp 1–2px làm gap
+  lệch giả.
+
 ## Khoảng cách giữa khối
 
 - Đo từ **box** chứ không phải từ mực: margin = box_top(khối dưới) - box_bottom(khối trên), với box tính
