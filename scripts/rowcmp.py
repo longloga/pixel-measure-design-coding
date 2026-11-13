@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""So từng "dòng mực" (dòng chữ, ảnh, nút) của 1 vùng giữa design và ảnh render, cạnh nhau trong 1 bảng.
+"""範囲内の「インク行」（文字行、画像、ボタン）をデザインとレンダリング画像で 1 行ずつ比較し、1 つの表に並べる。
 
-Cho biết trong 1 khối: dòng nào lệch dọc (khoảng cách đoạn/margin sai), dòng nào kết thúc ở x khác
-(font-size / letter-spacing / độ rộng khối sai → xuống dòng khác), chiều cao nét khác (font-size sai).
-Tự dò độ lệch dọc dy giữa 2 ảnh (khớp nhiều dòng nhất), nên không cần biết trước vị trí trên render.
+1 ブロック内で: どの行が縦にずれているか（段落間隔/margin の誤り）、どの行の終端 x が違うか
+（font-size / letter-spacing / ブロック幅の誤り → 改行位置が変わる）、字面の高さが違うか（font-size の誤り）がわかる。
+2 画像間の縦ズレ dy を自動探索する（最も多くの行が一致する値）ので、レンダリング上の位置を事前に知る必要はない。
 
   python3 rowcmp.py design.png shots/pc.png --box 260 2900 1180 3420
   python3 rowcmp.py design.png shots/pc.png --box 260 2900 1180 3420 --dy 20 --thr 40 --dscale 2
 
-Cột: y (rel) = y tính từ dòng đầu của vùng; h = chiều cao nét; x0-x1 = mép mực.
-`<<` khi |Δy| > 2 (so với dòng trước, tức lỗi phát sinh tại đó) hoặc |Δx1| > 3 hoặc |Δh| > 1.
-Lưu ý: body `text-align: justify` làm x1 của dòng đầy khác design dù cùng vị trí xuống dòng — chỉ đáng
-ngờ khi dòng xuống ở ký tự khác (dòng cuối đoạn có x1 lệch, hoặc số dòng khác nhau).
+列: y (rel) = 範囲の最初の行からの y、h = 字面の高さ、x0-x1 = インクの端。
+`<<` は |Δy| > 2（前の行との比較、つまりそこで発生した誤り）または |Δx1| > 3 または |Δh| > 1 のとき。
+注意: body の `text-align: justify` により、改行位置が同じでも満行の x1 はデザインと異なる — 疑うべきなのは
+別の文字で改行している場合のみ（段落最終行の x1 がずれている、または行数が違う）。
 """
 import argparse
 import numpy as np
@@ -23,7 +23,7 @@ def rows(path, box, scale, thr):
     x0, y0, x1, y1 = [int(round(v * scale)) for v in box]
     y0, y1 = max(y0, 0), min(y1, im.shape[0])
     reg = im[y0:y1, x0:x1]
-    ink = np.abs(reg - reg[:, :1, :]).sum(axis=2) > thr          # nền = màu cột trái của mỗi hàng
+    ink = np.abs(reg - reg[:, :1, :]).sum(axis=2) > thr          # 背景色 = 各行の左端カラムの色
     out, cur = [], None
     for i, line in enumerate(ink):
         xs = np.nonzero(line)[0]

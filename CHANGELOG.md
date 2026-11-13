@@ -19,6 +19,24 @@ option / quy trình, PATCH khi sửa lỗi hoặc chỉnh chữ.
 
 ---
 
+## [1.9.1] — 2026-11-13 — Comment / docstring trong script chuyển sang tiếng Nhật
+
+### Thay đổi
+- `scripts/*.py` (21 file): toàn bộ comment `#`, comment JS `//` nhúng trong script và docstring (module + hàm) dịch
+  từ tiếng Việt sang tiếng Nhật. Nội dung giữ nguyên ý, ví dụ lệnh giữ nguyên.
+- `.gitignore`, comment của git pre-commit hook do `changelog.py install-hook` tạo: dịch sang tiếng Nhật.
+- Không đổi logic, option CLI, message in ra màn hình.
+
+### Lý do
+- Quy tắc mới: comment trong code phải viết bằng tiếng Nhật để thành viên người Nhật đọc hiểu được (repo public).
+
+### So sánh trước / sau
+- Trước: comment/docstring tiếng Việt. Sau: tiếng Nhật; `py_compile` toàn bộ script OK, `audit.py --help` chạy được.
+- Số liệu hiệu suất: không ảnh hưởng (chưa đo — không đổi hành vi).
+
+### Tương thích
+- Hoàn toàn tương thích; chỉ đổi phần mô tả `--help` (lấy từ docstring) sang tiếng Nhật.
+
 ## [1.9.0] — 2026-11-06 — Tự động hoá 3 lỗi lặp nhiều nhất, audit kiểm vị trí theo XD, metrics đúng số
 
 ### Thay đổi

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lấy mẫu màu tại điểm, hoặc màu tối nhất trong vùng (màu chữ thật, tránh viền anti-alias).
+"""指定点の色、または範囲内で最も暗い色（アンチエイリアスの縁を避けた実際の文字色）を取得する。
 
   python3 colors.py design.png --scale 2 --pt btn 1150 40 --pt bg 5 1700
   python3 colors.py design.png --scale 2 --dark h2 180 1068 400 1104

@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""So vị trí/kích thước từng khối (DOM getBoundingClientRect) với số đo design.
+"""各ブロックの位置/サイズ（DOM getBoundingClientRect）をデザインの計測値と比較する。
 
-Dùng khi `pixeldiff` bị nhiễu bởi phần NGOÀI phạm vi sửa (header/KV/footer dùng chung khác design,
-banner ngôn ngữ, cookie bar...): căn theo 1 khối mốc trong vùng mình code rồi so từng khối, nên lệch ở
-header không lan xuống. Nhanh hơn chụp + pixeldiff (không chụp ảnh), chính xác tới px.
+修正範囲「外」の部分（デザインと異なる共通 header/KV/footer、言語バナー、cookie バー等）で `pixeldiff` にノイズが
+乗るときに使う: 自分がコーディングした範囲内の基準ブロックで位置を合わせてから各ブロックを比較するので、
+header のズレが下に波及しない。撮影 + pixeldiff より速く（撮影しない）、px 単位で正確。
 
   python3 rects.py http://localhost:8765/page.html targets.json
   python3 rects.py URL targets.json --vp 375 --styles --json out/rects.json
 
-targets.json — danh sách, y/h/x/w là số đo trên DESIGN (CSS px, lấy bằng measure.py), bỏ trống được:
+targets.json — リスト。y/h/x/w はデザイン上の計測値（CSS px、measure.py で取得）、省略可:
   [{"name": "anchor", "sel": ".anchor-list li", "y": 1118, "h": 100},
    {"name": "h2-1",   "sel": "#link01 h2",       "y": 1498, "h": 86, "x": 220, "w": 1000},
-   {"name": "intro",  "sel": ".intro"}]                       # không có y → chỉ in số đo render
-  (cũng nhận dạng rút gọn [name, sel, y, h])
+   {"name": "intro",  "sel": ".intro"}]                       # y が無い → レンダリングの計測値のみ出力
+  （短縮形 [name, sel, y, h] も可）
 
-Khối mốc = khối đầu tiên có y (hoặc --anchor NAME). Cột:
-  Δy    lệch so với design sau khi căn mốc (tích luỹ)
-  Δloc  Δy của khối này trừ Δy của khối trước → lỗi phát sinh NGAY GIỮA 2 khối (sửa chỗ này trước)
-  Δh/Δx/Δw  lệch kích thước / ngang
---styles in thêm font-size / weight / line-height / letter-spacing / màu của mỗi selector.
-Exit 1 nếu có |Δloc| hoặc |Δh| > --tol (mặc định 3).
+基準ブロック = y を持つ最初のブロック（または --anchor NAME）。列:
+  Δy    基準合わせ後のデザインとのズレ（累積）
+  Δloc  このブロックの Δy − 直前ブロックの Δy → 2 つのブロックの「間」で発生した誤り（ここから直す）
+  Δh/Δx/Δw  サイズ / 横方向のズレ
+--styles で各セレクタの font-size / weight / line-height / letter-spacing / 色も出力。
+|Δloc| または |Δh| > --tol（既定 3）があれば exit 1。
 """
 import argparse, json, os, sys
 from playwright.sync_api import sync_playwright
@@ -44,7 +44,7 @@ RECT_JS = '''s => { const e = document.querySelector(s); if (!e) return null;
 def norm(t):
     if isinstance(t, dict): return t
     flat = []
-    for v in t: flat.extend(v if isinstance(v, list) else [v])   # nhận cả [name, sel, [y, h]]
+    for v in t: flat.extend(v if isinstance(v, list) else [v])   # [name, sel, [y, h]] 形式も受け付ける
     keys = ['name', 'sel', 'y', 'h', 'x', 'w']
     return {k: v for k, v in zip(keys, flat) if v is not None}
 

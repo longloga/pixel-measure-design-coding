@@ -1,7 +1,7 @@
-# Dữ liệu đo hiệu suất: chứa tên dự án, đường dẫn máy — không bao giờ commit / chia sẻ
+# 実績計測データ: 案件名・ローカルパスを含むため絶対にコミット／共有しない
 metrics/
 
-# File tạm khi chạy script (ảnh chụp, crop, kết quả so sánh)
+# スクリプト実行時の一時ファイル（スクリーンショット、切り出し画像、比較結果）
 shots/
 crops/
 *.png

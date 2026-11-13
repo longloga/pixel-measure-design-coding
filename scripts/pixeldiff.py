@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""So sánh TỰ ĐỘNG design ↔ render theo từng dải ngang: tự dò offset dọc của mỗi dải (không cần nhập
---yd/--ym bằng tay như compare.py), in bảng độ lệch, và xuất ảnh heatmap chỉ chỗ khác.
+"""デザイン ↔ レンダリングを横帯ごとに自動比較: 各帯の縦オフセットを自動探索し（compare.py のように
+--yd/--ym を手入力しなくてよい）、ズレの表を出力し、差分箇所を示すヒートマップ画像を出力する。
 
-Cách hiểu bảng:
-  drift  = render đang lệch bao nhiêu px so với design tại dải này (cộng dồn từ trên xuống).
-  Δ      = drift dải này - drift dải trước → chính là lỗi chiều cao CỤC BỘ, nằm ở giữa 2 dải.
-           Sửa từ dải có |Δ| lớn nhất ở trên cùng trước — sửa nó sẽ kéo cả phần dưới về đúng.
-  diff%  = % pixel còn khác (> --thr) sau khi đã căn offset → lỗi về kích thước/vị trí ngang/màu/font.
-  dx     = lệch ngang tốt nhất của dải (≠0 → container/padding trái-phải sai).
+表の見方:
+  drift  = この帯でレンダリングがデザインから何 px ずれているか（上からの累積）。
+  Δ      = この帯の drift - 前の帯の drift → 2 つの帯の間にある「局所的な」高さの誤り。
+           |Δ| が大きい帯のうち一番上から直す — そこを直すと下全体も正しい位置に戻る。
+  diff%  = offset を合わせた後もまだ異なる（> --thr）ピクセルの割合 → サイズ/横位置/色/フォントの誤り。
+  dx     = 帯の最適な横ズレ（≠0 → コンテナ/左右 padding の誤り）。
 
   python3 pixeldiff.py design_pc.png shots/pc.png --dscale 2 --out diff_pc.png
   python3 pixeldiff.py design_sp.png shots/sp.png --dscale 2 --band 150 --out diff_sp.png --json m/pd_sp.json
-  python3 pixeldiff.py design_pc.png shots/pc.png --dscale 2 --from 0 --to 1600   # chỉ 1 vùng
+  python3 pixeldiff.py design_pc.png shots/pc.png --dscale 2 --from 0 --to 1600   # 1 範囲のみ
 
-Tham số: --band chiều cao dải (CSS px, mặc định 200), --search phạm vi dò offset (mặc định ±200,
-tăng lên nếu lệch nhiều), --mask vùng bỏ qua (ảnh placeholder khác, slider...) dạng x0 y0 x1 y1 theo design.
-Dải gần như trơn (nền trắng) thì offset không xác định → đánh dấu '~' và lấy drift của dải trước.
+パラメータ: --band 帯の高さ（CSS px、既定 200）、--search offset の探索範囲（既定 ±200、
+ズレが大きい場合は増やす）、--mask 無視する範囲（別のプレースホルダー画像、スライダー等）をデザイン基準の x0 y0 x1 y1 で指定。
+ほぼ無地の帯（白背景）は offset が決まらない → '~' を付け、前の帯の drift を使う。
 """
 import argparse, json, os
 import numpy as np
@@ -61,7 +61,7 @@ def pct(db, mb, ry, dx):
     return float(((np.abs(db - rb) > a.thr) & mb).sum() / max(mb.sum(), 1) * 100)
 
 def resync(db, mb, y):
-    """Tìm vị trí khớp nhất của dải design trên toàn bộ render (thô bước 8, ảnh co 1/4, rồi tinh)."""
+    """デザインの帯がレンダリング全体のどこに最も一致するかを探す（粗探索: 8 刻み・1/4 縮小 → 精密探索）。"""
     small = [(cost(db[::4, ::4], mb[::4, ::4], ry, 0, 4), ry) for ry in range(0, R.shape[0] - db.shape[0], 8)]
     small = sorted(c for c in small if c[0] is not None)[:5]
     best = None
@@ -78,11 +78,11 @@ for y in range(a.y0, y1, a.band):
     flat = db[mb].std() < 3 if mb.any() else True
     if flat:
         rows.append({'y': y, 'h': h, 'drift': drift, 'delta': 0, 'dx': 0, 'diff': None, 'flat': True}); continue
-    # dò thô (bước 4px, quanh drift hiện tại) rồi dò tinh ±4
+    # 粗い探索（4px 刻み、現在の drift 周辺）→ ±4 で精密探索
     cands = [(cost(db[::2, ::2], mb[::2, ::2], y + drift + o, 0, 2), o) for o in range(-a.search, a.search + 1, 4)]
     cands = [c for c in cands if c[0] is not None]
     if not cands: break
-    # ưu tiên giữ offset cũ: chỉ đổi khi tốt hơn rõ rệt (tránh khớp nhầm vào nội dung lặp/khác hẳn)
+    # 既存の offset を優先: 明らかに良い場合のみ変更（繰り返し／全く異なる内容への誤マッチを防ぐ）
     c0 = cost(db[::2, ::2], mb[::2, ::2], y + drift, 0, 2)
     cbest, o = min((c + a.penalty * abs(k), k) for c, k in cands)
     if c0 is not None and not (cbest < c0 * 0.8): o = 0
@@ -91,10 +91,10 @@ for y in range(a.y0, y1, a.band):
     _, dx = min(((cost(db, mb, y + off, k) or 1e9, k) for k in range(-a.xsearch, a.xsearch + 1)))
     diff = pct(db, mb, y + off, dx)
     if diff > a.mismatch or abs(o) >= a.search - 4:
-        # mất dấu: render có khối dài/ngắn hơn design (> --search) -> dò lại trên TOÀN trang render
+        # 追跡ロスト: render 側のブロックが design より長い／短い（> --search）→ render ページ全体で再探索
         g = resync(db, mb, y)
-        # xác nhận: diff tốt hơn rõ rệt VÀ dải kế tiếp (có nội dung) cũng khớp ở cùng offset — tránh khớp nhầm
-        # vào khối trông giống (card, nút lặp lại)
+        # 確認: diff が明らかに改善 かつ 次の（内容のある）帯も同じ offset で一致 — 似たブロック
+        # （繰り返しのカード・ボタン）への誤マッチを防ぐ
         ok = g is not None and g[2] < min(a.mismatch, a.resync_max) and g[2] < diff * 0.6
         if ok:
             ny = y + h
@@ -106,7 +106,7 @@ for y in range(a.y0, y1, a.band):
             off, dx, diff = g
             rows.append({'y': y, 'h': h, 'drift': off, 'delta': 0, 'jump': off - drift, 'dx': dx, 'diff': round(diff, 2), 'flat': False})
             drift = off; continue
-    if diff > a.mismatch:  # nội dung khác hẳn (ảnh placeholder khác, chưa code, slider...) -> không tin offset
+    if diff > a.mismatch:  # 内容が全く異なる（別のプレースホルダー画像、未コーディング、スライダー等）→ offset を信用しない
         rows.append({'y': y, 'h': h, 'drift': drift, 'delta': 0, 'dx': 0, 'diff': round(diff, 2), 'flat': False, 'mismatch': True}); continue
     rows.append({'y': y, 'h': h, 'drift': off, 'delta': off - drift, 'dx': dx, 'diff': round(diff, 2), 'flat': False})
     drift = off

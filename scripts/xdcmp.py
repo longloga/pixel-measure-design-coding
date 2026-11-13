@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""So style chữ trên trang đã code với spec từ xdspec.py hoặc figspec.py (size / weight / letter-spacing / line-height / màu).
+"""コーディング済みページの文字スタイルを xdspec.py または figspec.py の spec と比較する（size / weight / letter-spacing / line-height / 色）。
 
   python3 xdcmp.py http://localhost:8765/index.html spec.json --ab "TOP_PC" --vp 1280x740
   python3 xdcmp.py URL spec.json --ab "TOP_SP" --vp 375x740 --mobile --json out.json
 
-Ghép từng đoạn chữ XD với text node trên trang có cùng nội dung (8 ký tự đầu), chọn node gần toạ độ XD nhất
-(đặt --vp cao sao cho KV/khối đầu cao bằng design để toạ độ gần nhau). Bỏ qua lệch line-height khi tuỳ chọn
---lh-multiline (mặc định chỉ báo lh khi XD có lineHeight). Dòng "ghép nhầm" thường lệch size rất lớn — kiểm bằng mắt.
---prep "JS" chạy thêm trước khi đo (mở accordion, đóng modal...).
+XD の各テキストを、内容（先頭 8 文字）が同じページ上のテキストノードと対応付け、XD 座標に最も近いノードを選ぶ
+（座標が近くなるよう、KV/先頭ブロックがデザインと同じ高さになる --vp を指定する）。--lh-multiline オプションで
+line-height のズレを無視（既定では XD に lineHeight がある場合のみ lh を報告）。「誤対応」の行はたいてい size が大きくずれる — 目視で確認すること。
+--prep "JS" で計測前に追加の JS を実行（アコーディオンを開く、モーダルを閉じる等）。
 """
 import argparse, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

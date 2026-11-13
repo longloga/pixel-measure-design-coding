@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Ghép design (trái) và render (phải) cạnh nhau cho một đoạn, để xem bằng Read.
-Mỗi bên có offset y riêng vì section có thể lệch (hoặc section bị bỏ qua).
+"""1 区間についてデザイン（左）とレンダリング（右）を並べた画像を作り、Read で確認できるようにする。
+セクションがずれている（または省略されている）ことがあるため、左右それぞれに y オフセットを指定する。
 
   python3 compare.py design_pc.png shots/pc.png --dscale 2 --yd 1616 --ym 1613 --h 1100 --out c.png --zoom 0.5
-Nhiều đoạn (hợp cho SP): --pair yd ym h lặp lại, các đoạn được xếp ngang.
+複数区間（SP 向け）: --pair yd ym h を繰り返し指定すると、各区間が横に並ぶ。
 """
 import argparse
 from PIL import Image

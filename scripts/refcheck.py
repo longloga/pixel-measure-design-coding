@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""L-FLOW-09: tìm nội dung CHỈ có trong ảnh phụ (ảnh 1 màn hình, 追従, hover, accordion mở...) mà design chính không có.
+"""L-FLOW-09: 補助画像（1 画面キャプチャ、追従、hover、アコーディオン展開時など）に「だけ」あり、メインデザインに無い内容を探す。
 
-Mỗi ảnh phụ được dò vị trí khớp nhất trong ảnh design chính (so profile từng hàng, thu nhỏ), rồi so pixel tại vị
-trí đó: các dải KHÁC được in ra (kèm "mép trên/dưới màn hình" → thường là thanh cố định / 追従) và cắt ảnh
-main|ref cạnh nhau vào --out để đọc. Ảnh phụ khác chiều rộng được co về chiều rộng ảnh chính.
+各補助画像について、メインデザイン画像内で最も一致する位置を探索し（行ごとのプロファイルを縮小して比較）、その位置で
+ピクセル比較する: 「異なる」帯を出力し（「画面上端/下端」付き → たいてい固定バー / 追従）、main|ref を並べた画像を
+--out に切り出して確認できるようにする。幅の異なる補助画像はメイン画像の幅に合わせて縮小する。
 
   python3 refcheck.py design_pc.png ref_scroll.png ref_hover.png --out $S/refcheck
   python3 refcheck.py design_sp.png sp_menu_open.png --thr 40 --min-band 12
 
-Kết quả mỗi ảnh: vị trí khớp (y trên design chính), độ khớp (%), danh sách dải khác. Ảnh không khớp chỗ nào
-(độ khớp thấp) = trạng thái / trang khác hẳn (menu mở, modal) → code + kiểm chứng riêng trạng thái đó.
-Exit 1 nếu có ảnh phụ chứa dải khác → phải liệt kê vào bảng phân loại ảnh (SKILL.md bước 1) và hiện thực.
+各画像の結果: 一致位置（メインデザイン上の y）、一致度（%）、異なる帯の一覧。どこにも一致しない（一致度が低い）
+画像 = 全く別の状態 / ページ（メニュー展開、モーダル）→ その状態を個別にコーディング・検証する。
+異なる帯を含む補助画像があれば exit 1 → 画像分類表（SKILL.md ステップ 1）に記載して実装すること。
 """
 import argparse, os, sys
 import numpy as np
@@ -25,7 +25,7 @@ def load(p, width=None):
 
 
 def best_offset(main, ref, f=4):
-    """Dò offset dọc: so profile thu nhỏ (rộng 160, cao /f)."""
+    """縦オフセットの探索: 縮小したプロファイル（幅 160、高さ /f）で比較。"""
     w = 160
     m = np.asarray(main.convert('L').resize((w, max(1, main.height // f)))).astype(np.float32)
     r = np.asarray(ref.convert('L').resize((w, max(1, ref.height // f)))).astype(np.float32)
@@ -53,7 +53,7 @@ def main():
     for rp in a.refs:
         R = load(rp, M.width)
         off, score = best_offset(M, R)
-        # tinh chỉnh ±6px ở độ phân giải đầy đủ
+        # フル解像度で ±6px の微調整
         mr = np.asarray(R).astype(int)
         cands = []
         for o in range(max(0, off - 6), min(M.height - R.height, off + 6) + 1):

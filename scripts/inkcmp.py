@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""So từng DÒNG MỰC (khối chữ / ảnh / nút) trong 1 cột của ảnh design và ảnh render → khoảng cách dọc thật.
+"""デザイン画像とレンダリング画像の 1 カラム内で「インク行」（文字ブロック / 画像 / ボタン）を 1 つずつ比較 → 実際の縦方向の間隔。
 
-Dùng khi không có XD/Figma, hoặc để kiểm chứng xdpos.py trên chính ảnh design. Chỉ quét trong cột x0..x1
-(chọn cột chỉ chứa khối cần đo, tránh ảnh/hình trang trí bên cạnh) nên thấy được margin GIỮA các dòng mà
-pixeldiff dải lớn bỏ qua (L-SHOT-11).
+XD/Figma が無いとき、またはデザイン画像上で xdpos.py の結果を検証するときに使う。x0..x1 のカラム内だけを走査する
+（計測対象のブロックだけを含むカラムを選び、横の画像や装飾を避ける）ため、大きな帯で比較する pixeldiff では
+見逃す行間のマージンも検出できる（L-SHOT-11）。
 
   python3 inkcmp.py design.png render.png --box 2520 3020 100 560
   python3 inkcmp.py design@2x.png shots/pc.png --dscale 2 --box 2520 3020 100 560 --roff 6 --thr 150 --gap 3
 
---box Y0 Y1 X0 X1 : vùng theo CSS px của DESIGN; --roff N: render lệch sẵn N px (vd section phía trên đã lệch)
---thr  : ngưỡng khác màu so với màu nền (trung vị) của từng hàng (nền ảnh/gradient → tăng 150〜200)
---gap  : số hàng trống tối đa vẫn coi là cùng 1 khối (chữ nhiều dòng tách riêng → để 3〜4)
-Cột: h (cao khối), gap (khoảng trắng tới khối trước), dTop (lệch mép trên),
-     Δloc = dTop − dTop của khối hợp lệ trước = lượng margin/padding cần sửa NGAY TRÊN khối đó (so top→top nên
-     không bị nhiễu khi chữ số/ảnh render cao thấp 1–2px). Khối cao khác > --hdiff px (dính hình trang trí,
-     xuống dòng khác) bị đánh "?" và bỏ qua → thu hẹp --box nếu cần đo nó.
-Exit 1 nếu có khối |Δloc| > --tol VÀ |dTop − dTop khối đầu| > --tol (mặc định 1).
+--box Y0 Y1 X0 X1 : デザイン側の CSS px での範囲。--roff N: render が最初から N px ずれている（例: 上のセクションがずれている）
+--thr  : 各行の背景色（中央値）との色差のしきい値（画像/グラデーション背景 → 150〜200 に上げる）
+--gap  : 同じブロックとみなす空白行の最大数（複数行の文字が分かれてしまう場合 → 3〜4）
+列: h（ブロックの高さ）、gap（前のブロックまでの余白）、dTop（上端のズレ）、
+     Δloc = dTop − 直前の有効ブロックの dTop = そのブロックの直上で直すべき margin/padding の量（top→top で比較するので
+     数字や画像のレンダリング高さが 1〜2px 違ってもノイズにならない）。高さが --hdiff px 以上異なるブロック（装飾に
+     くっついた、改行位置が違う）は "?" を付けてスキップ → 計測したい場合は --box を狭める。
+|Δloc| > --tol かつ |dTop − 先頭ブロックの dTop| > --tol のブロックがあれば exit 1（既定 1）。
 """
 import argparse, sys
 import numpy as np
@@ -68,7 +68,7 @@ def main():
             loc = dt - last if last is not None else 0
             last = dt
             base = dt if base is None else base
-            # cần cả 2: nhảy so với khối trước VÀ lệch so với khối đầu vùng (tránh báo giả khi +1/-1 do làm tròn)
+            # 両方を満たす場合のみ: 直前ブロックからのジャンプ かつ 範囲先頭ブロックからのズレ（丸めによる ±1 の誤検知を防ぐ）
             if abs(loc) > a.tol and abs(dt - base) > a.tol:
                 bad += 1; note = '  <== margin/padding ngay trên khối này'
         f = lambda b: f"{b[0]:6}-{b[1]:<6}" if b else ' ' * 13

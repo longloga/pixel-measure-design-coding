@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Chụp full-page bản code ở nhiều viewport bằng Playwright + Chrome của máy.
-(Không dùng `chrome --headless --window-size=375`: Chrome có độ rộng cửa sổ tối thiểu ~500px nên SP sai.)
+"""Playwright + ローカルの Chrome で、コーディング結果を複数ビューポートでフルページ撮影する。
+（`chrome --headless --window-size=375` は使わない: Chrome のウィンドウ最小幅は ~500px のため SP が正しくならない。）
 
   python3 shot.py file:///path/index.html --out shots/ --vp pc=1440 --vp sp=375
-  python3 shot.py URL --vp pc=1400x675   # WxH: đặt chiều cao viewport (phần tử 100vh như KV full màn hình
-                                         # sẽ cao bằng design khi H = toạ độ đáy KV trên design)
-  python3 shot.py http://localhost:8080/index.html --out shots/ --hover ".btn"   # chụp thêm trạng thái hover
+  python3 shot.py URL --vp pc=1400x675   # WxH: ビューポートの高さを指定（全画面 KV など 100vh の要素は
+                                         # H = デザイン上の KV 下端座標 にするとデザインと同じ高さになる）
+  python3 shot.py http://localhost:8080/index.html --out shots/ --hover ".btn"   # hover 状態も追加で撮影
 
-Trước khi chụp, script:
-  - tắt transition/animation (để không chụp giữa chừng hiệu ứng),
-  - cuộn từ trên xuống dưới để kích hoạt fade-in khi vào màn hình (inview / IntersectionObserver / AOS /
-    WOW) và ảnh lazy-load — KHÔNG cuộn thì các khối .fade vẫn opacity:0 và ảnh chụp bị trống,
-  - chờ document.fonts.ready (tránh chụp bằng font dự phòng),
-  - dừng slider (slick/swiper) ở slide đầu nếu có.
-Tải trang qua _page.open_page: chờ networkidle tối đa --settle ms rồi đi tiếp (không crash vì GTM/analytics).
-In ra scrollWidth (phát hiện tràn ngang) và chiều cao trang.
+撮影前にスクリプトが行うこと:
+  - transition/animation を無効化（エフェクト途中を撮らないように）、
+  - 上から下までスクロールして、画面内に入ったときの fade-in（inview / IntersectionObserver / AOS /
+    WOW）と lazy-load 画像を発火させる — スクロールしないと .fade ブロックは opacity:0 のままで撮影結果が空になる、
+  - document.fonts.ready を待つ（代替フォントで撮影しないように）、
+  - スライダー（slick/swiper）があれば最初のスライドで停止。
+ページは _page.open_page で読み込む: networkidle を最大 --settle ms 待ってから続行（GTM/アナリティクスでクラッシュしない）。
+scrollWidth（横はみ出しの検出）とページの高さを出力する。
 """
 import argparse, os, sys
 from playwright.sync_api import sync_playwright

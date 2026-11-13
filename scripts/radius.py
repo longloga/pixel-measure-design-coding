@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Ước lượng border-radius tại góc một box: đi theo đường chéo từ góc vào đến khi gặp pixel khác nền.
-r ≈ d / 0.2929. Nếu ảnh có nền trắng ngay tại góc thì kết quả sai (quá lớn) — bỏ qua góc đó.
+"""ボックスの角の border-radius を推定: 角から対角線方向に進み、背景と異なるピクセルに当たるまでの距離を測る。
+r ≈ d / 0.2929。角のすぐ位置に白背景の画像がある場合は結果が誤る（大きすぎる）— その角は無視する。
 
   python3 radius.py design.png --scale 2 --corner TL 733 2010 --corner BR 1409.5 2617.5
 """

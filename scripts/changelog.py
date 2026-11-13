@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Hỗ trợ ghi CHANGELOG.md mỗi khi cập nhật CHÍNH skill này (script, SKILL.md, references).
+"""このスキル自体（スクリプト、SKILL.md、references）を更新するたびに CHANGELOG.md を書くための補助ツール。
 
-  python3 scripts/changelog.py draft            # so với commit gần nhất → in khung mục changelog đã điền phần "so sánh"
+  python3 scripts/changelog.py draft            # 直前のコミットと比較 →「比較」欄を埋めた changelog 項目の雛形を出力
   python3 scripts/changelog.py draft --since c29c610
-  python3 scripts/changelog.py check            # exit 1 nếu skill có thay đổi mà CHANGELOG.md chưa được cập nhật
-  python3 scripts/changelog.py install-hook     # cài git pre-commit hook chạy `check` (chặn commit thiếu changelog)
+  python3 scripts/changelog.py check            # スキルに変更があるのに CHANGELOG.md が未更新なら exit 1
+  python3 scripts/changelog.py install-hook     # `check` を実行する git pre-commit hook をインストール（changelog 漏れのコミットをブロック）
 
-`draft` tự liệt kê (từ git diff): file thêm/sửa/xoá kèm số dòng, option CLI (`add_argument`) thêm/bỏ ở từng
-script, mã bài học (L-XXX-NN) thêm/bỏ trong lessons.md. Phần LÝ DO và SỐ LIỆU TRƯỚC/SAU phải tự điền —
-script chỉ đưa khung, không đoán lý do.
+`draft` は git diff から自動で列挙する: 追加/変更/削除されたファイルと行数、各スクリプトで追加/削除された CLI
+オプション（`add_argument`）、lessons.md で追加/削除された教訓コード（L-XXX-NN）。「理由」と「変更前/後の数値」は
+自分で記入すること — スクリプトは雛形を出すだけで、理由は推測しない。
 """
 import argparse, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TRACKED = ('SKILL.md', 'scripts/', 'references/', 'README')   # thay đổi ở đây bắt buộc có changelog
+TRACKED = ('SKILL.md', 'scripts/', 'references/', 'README')   # ここが変更されたら changelog の記載が必須
 LOG = 'CHANGELOG.md'
 
 
@@ -22,7 +22,7 @@ def git(*args):
 
 
 def changed(since):
-    """[(status, path)] gồm cả file chưa track."""
+    """[(status, path)] 未追跡ファイルも含む。"""
     out = [(l[0], l[1:].strip()) for l in git('diff', '--name-status', since).splitlines() if l.strip()]
     out += [('A', p) for p in git('ls-files', '--others', '--exclude-standard').splitlines() if p]
     return out
@@ -110,7 +110,7 @@ def check(since):
 def install_hook():
     hook = os.path.join(ROOT, '.git', 'hooks', 'pre-commit')
     with open(hook, 'w') as f:
-        f.write('#!/bin/sh\n# Chặn commit thay đổi skill khi CHANGELOG.md chưa cập nhật (bỏ qua: git commit --no-verify)\n'
+        f.write('#!/bin/sh\n# CHANGELOG.md 未更新のままスキルを変更したコミットをブロック（回避: git commit --no-verify）\n'
                 'python3 "$(git rev-parse --show-toplevel)/scripts/changelog.py" check --since HEAD\n')
     os.chmod(hook, 0o755)
     print('Đã cài', hook)

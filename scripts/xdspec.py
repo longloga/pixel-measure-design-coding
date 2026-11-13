@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Đọc file Adobe XD (.xd = zip JSON) → spec chính xác của mọi text / shape, thay cho việc đo từ ảnh.
+"""Adobe XD ファイル（.xd = JSON の zip）を読む → 全テキスト / shape の正確な spec。画像から計測する代わりに使う。
 
-  python3 xdspec.py design.xd --out spec.json            # trích toàn bộ artboard
-  python3 xdspec.py design.xd --out spec.json --list     # chỉ liệt kê artboard (tên, kích thước)
-  python3 xdspec.py design.xd --summary                  # bảng màu chữ / nền / viền / gradient / hiệu ứng
+  python3 xdspec.py design.xd --out spec.json            # 全アートボードを抽出
+  python3 xdspec.py design.xd --out spec.json --list     # アートボードの一覧のみ（名前、サイズ）
+  python3 xdspec.py design.xd --summary                  # 文字色 / 背景 / 枠線 / グラデーション / エフェクトの一覧表
 
 spec.json:
   artboards: {id: {name, x, y, w, h}}
-  texts: [{ab, text, family, weight, size, ls(em), lh(px), color, x, y}]  ← y ≈ đỉnh glyph dòng chứa đoạn chữ
+  texts: [{ab, text, family, weight, size, ls(em), lh(px), color, x, y}]  ← y ≈ テキストを含む行のグリフ上端
   shapes: [{ab, name, kind(rect/line/path), x, y, w, h, fill, opacity, gop, group, z, stroke, sw, dash, r, blend, blur, shadow}]
-    opacity = opacity hiệu dụng (shape × mọi group cha); gop = phần đến từ group cha; group = tên group trực tiếp;
-    z = thứ tự vẽ trong artboard (số lớn vẽ sau = nằm trên).
-Toạ độ tương đối theo artboard (CSS px @1x).
-Lưu ý: shape nằm trong group có mask → kích thước thật có thể bị cắt (đối chiếu ảnh trước khi tin chiều cao).
-Giải nén vào thư mục tạm; KHÔNG sửa file gốc.
+    opacity = 実効 opacity（shape × すべての親 group）、gop = 親 group 由来の分、group = 直接の親 group 名、
+    z = アートボード内の描画順（大きいほど後に描画 = 上に重なる）。
+座標はアートボード基準（CSS px @1x）。
+注意: マスク付き group 内の shape → 実際のサイズは切り取られている可能性がある（高さを信用する前に画像と照合する）。
+一時ディレクトリに展開する。元ファイルは変更しない。
 """
 import argparse, json, os, sys, tempfile, zipfile
 from collections import Counter
@@ -89,7 +89,7 @@ def main():
                 else:
                     d.update(x=round(x - ox), y=round(y - oy))
                 shapes.append(d)
-            # opacity của group/artboard được nhân xuống mọi shape con (XD áp opacity cho cả nhóm)
+            # group/artboard の opacity を子 shape すべてに掛け合わせる（XD はグループ全体に opacity を適用するため）
             cg = gop * (st.get('opacity', 1) if n.get('type') != 'shape' else 1)
             cn = n.get('name') if n.get('type') == 'group' else gname
             for c in n.get('children', []) or []: walk(c, x, y, cg, cn)

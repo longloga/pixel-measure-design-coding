@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""So VỊ TRÍ dọc từng khối + từng đoạn chữ trên trang đã code với spec từ xdspec.py / figspec.py.
+"""コーディング済みページの各ブロック + 各テキストの縦位置を xdspec.py / figspec.py の spec と比較する。
 
-xdcmp.py chỉ so style chữ (size/weight/ls/lh/màu) — margin/padding sai vẫn lọt (L-MEAS-15). Script này ghép:
-  - shape (rect) XD ↔ phần tử DOM cùng x / w / h (±3px)  → dy của khung (card, nút, section có nền...)
-  - đoạn chữ XD ↔ text node cùng nội dung                 → dy của tâm dòng đầu
-    (tâm XD = y + size/2 vì y của chữ XD là mép trên em-box; tâm DOM = tâm rect dòng đầu)
-rồi sắp theo y design và in:
-  dy    lệch tuyệt đối (render − design)
-  Δloc  dy của mục này − dy của mục CÙNG LOẠI ngay trước (chữ↔chữ, khung↔khung) → lỗi phát sinh NGAY giữa
-        2 mục: margin / padding / line-height của khối đó sai. Sửa từ Δloc đầu tiên vượt ngưỡng trở xuống.
-  Tâm chữ DOM lệch tâm em-box XD theo metric font (≈ ±2px, Shippori 50px ≈ -4px) → chữ đổi font/cỡ có thể
-  báo Δloc giả ±2〜4px: XÁC NHẬN bằng inkcmp.py trên ảnh design trước khi sửa (L-MEAS-15).
+xdcmp.py は文字スタイル（size/weight/ls/lh/色）しか比較しない — margin/padding の誤りは見逃す（L-MEAS-15）。このスクリプトは以下を対応付ける:
+  - XD の shape（rect）↔ x / w / h が同じ（±3px）DOM 要素  → 枠（カード、ボタン、背景付きセクション等）の dy
+  - XD のテキスト ↔ 内容が同じテキストノード               → 1 行目の中心の dy
+    （XD の中心 = y + size/2。XD の文字の y は em-box の上端のため。DOM の中心 = 1 行目の rect の中心）
+デザインの y 順に並べて出力:
+  dy    絶対ズレ（render − design）
+  Δloc  この項目の dy − 直前の「同じ種類」の項目の dy（文字↔文字、枠↔枠）→ 2 項目の「間」で発生した誤り:
+        そのブロックの margin / padding / line-height が誤り。しきい値を超えた最初の Δloc から下へ順に直す。
+  DOM の文字中心はフォントメトリクスにより XD の em-box 中心からずれる（≈ ±2px、Shippori 50px ≈ -4px）→ フォント/サイズが
+  変わる文字では ±2〜4px の偽 Δloc が出ることがある: 直す前にデザイン画像上で inkcmp.py で確認する（L-MEAS-15）。
 
   python3 xdpos.py http://localhost:8765/index.html spec.json --ab "TOP_PC" --vp 1280x740
   python3 xdpos.py URL spec.json --ab "TOP_SP" --vp 375x740 --mobile --from 1800 --to 4000 --all
   python3 xdpos.py URL spec.json --ab "TOP_PC" --json out.json --tol 1
 
-Mặc định (--tol 2) chỉ in mục có |Δloc| > tol (kèm 1 dòng ngữ cảnh trước). --all in mọi mục. Đặt --vp cao bằng KV của
-design (L-SHOT-10). Mục có |dy| > --max (mặc định 60) bị coi là ghép nhầm và bỏ qua (in ở cuối).
-Exit 1 nếu còn |Δloc| > tol.
+既定（--tol 2）では |Δloc| > tol の項目のみ出力（直前 1 行の文脈付き）。--all ですべて出力。--vp の高さはデザインの KV に
+合わせる（L-SHOT-10）。|dy| > --max（既定 60）の項目は誤対応とみなしてスキップ（最後に出力）。
+|Δloc| > tol が残っていれば exit 1。
 """
 import argparse, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -98,8 +98,8 @@ def main():
         it = dict(kind='B', y=s['y'], x=s['x'], dy=dy, dh=r['h'] - s['h'], el=r['tag'], name=f"{s['w']}x{s['h']} {s.get('name') or ''}"[:22])
         (wrong if abs(dy) > a.max else items).append(it)
     items.sort(key=lambda i: (i['y'], i['x']))
-    # Δloc so với mục TRƯỚC CÙNG LOẠI (chữ↔chữ, khung↔khung): tâm chữ DOM lệch tâm em-box XD một lượng phụ
-    # thuộc metric font (Shippori 50px ≈ -4px), trộn 2 loại sẽ báo nhiễu ±2〜5px ở mọi chỗ chuyển loại.
+    # Δloc は直前の「同じ種類」の項目と比較（文字↔文字、枠↔枠）: DOM の文字中心は XD の em-box 中心から
+    # フォントメトリクス分ずれる（Shippori 50px ≈ -4px）ため、種類を混ぜると切り替わり箇所ごとに ±2〜5px のノイズが出る。
     prev = {}; flagged = 0
     for it in items:
         p_ = prev.get(it['kind'])

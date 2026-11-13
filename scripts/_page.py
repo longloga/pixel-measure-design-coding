@@ -1,10 +1,10 @@
-"""Helper dùng chung: mở trang bền vững với script bên thứ 3 (GTM, analytics, font CDN).
+"""共通ヘルパー: サードパーティスクリプト（GTM、アナリティクス、フォント CDN）があっても安定してページを開く。
 
-Vấn đề cũ: `goto()` chờ sự kiện "load"/"networkidle" không giới hạn mềm → trang có GTM/quảng cáo
-hay request treo làm timeout 30s rồi CRASH, phải chạy lại nhiều lần.
-Cách mới (không giảm chức năng): vẫn chờ networkidle như cũ nhưng có hạn (`settle_ms`); quá hạn thì
-tiếp tục với DOM đã sẵn sàng thay vì crash, và luôn chờ webfont (document.fonts.ready) — đo/ chụp trước
-khi font tải xong sẽ sai vị trí xuống dòng.
+旧来の問題: `goto()` が "load"/"networkidle" を上限なしで待つため、GTM・広告・応答しないリクエストのある
+ページで 30 秒タイムアウトしてクラッシュし、何度もやり直す必要があった。
+新方式（機能は削らない）: 従来どおり networkidle を待つが上限（`settle_ms`）を設け、超えたらクラッシュせず
+DOM 準備済みの状態で続行する。また必ず Web フォント（document.fonts.ready）を待つ — フォント読み込み前に
+計測／撮影すると改行位置がずれるため。
 """
 import os
 
@@ -18,7 +18,7 @@ def launch(p):
 
 
 def open_page(pg, url, settle_ms=8000, nav_timeout=60000):
-    """Trả về None nếu tải trọn vẹn, hoặc chuỗi cảnh báo nếu phải dừng chờ networkidle giữa chừng."""
+    """完全に読み込めた場合は None、networkidle 待ちを途中で打ち切った場合は警告文字列を返す。"""
     note = None
     pg.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
     try:

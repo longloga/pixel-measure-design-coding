@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Cắt ảnh placeholder từ design theo toạ độ CSS px (để bản render nhìn giống design khi so sánh).
-Đọc danh sách từ file JSON: [{"src": "pc", "box": [x0,y0,x1,y1], "out": "page/top/story.jpg"}, ...]
+"""CSS px 座標でデザインからプレースホルダー画像を切り出す（比較時にレンダリングがデザインと同じ見た目になるように）。
+JSON ファイルからリストを読む: [{"src": "pc", "box": [x0,y0,x1,y1], "out": "page/top/story.jpg"}, ...]
 
   python3 crop_assets.py --pc design_pc.png --sp design_sp.png --scale 2 --root user/media/THEME/ crops.json
 """

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Đo các "dòng mực" (text/ảnh/box) trong một vùng: in y bắt đầu-kết thúc, chiều cao, x trái-phải.
-Pixel được coi là mực nếu khác màu nền (lấy tại cột x0 cùng hàng) quá ngưỡng thr.
+"""範囲内の「インク行」（文字/画像/ボックス）を計測: y の開始-終了、高さ、x の左-右を出力。
+同じ行の x0 カラムで取った背景色との差がしきい値 thr を超えるピクセルをインクとみなす。
 
   python3 measure.py design.png --scale 2 --box 90 790 1300 1530 --thr 20
-Mẹo:
-- Nền gradient ngang: dùng thr ~20 (gradient chỉ lệch ~11), chữ nhạt trên nền (#F2F0F4/#fff) vẫn bắt được.
-- Chỉ muốn đo chữ đậm: thr 40-60. Muốn tách chữ EN lớn khỏi dòng sub: thu hẹp x.
-- Suy ra: font-size ≈ chiều cao nét kanji / 0.92; line-height = khoảng cách y giữa 2 dòng;
-  letter-spacing ≈ (độ rộng dòng / số ký tự) - font-size.
+コツ:
+- 横グラデーション背景: thr ~20（グラデーションの差は ~11 程度）なら、背景（#F2F0F4/#fff）上の薄い文字も拾える。
+- 濃い文字だけを測りたい: thr 40-60。大きい英字をサブ行から分離したい: x を狭める。
+- 推定: font-size ≈ 漢字の字面の高さ / 0.92、line-height = 2 行間の y の差、
+  letter-spacing ≈ (行の幅 / 文字数) - font-size。
 """
 import argparse
 from PIL import Image

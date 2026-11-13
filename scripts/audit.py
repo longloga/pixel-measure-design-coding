@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
-"""Kiểm tra tự động HTML/CSS/responsive/liên kết cho 1 hoặc nhiều trang tĩnh (không cần design).
-Gồm 2 lớp:
-  1. Tĩnh (đọc file): thẻ không đóng/đóng sai, id trùng, img thiếu alt/src, file ảnh/CSS/JS/link nội bộ
-     không tồn tại, url() trong CSS hỏng, target=_blank thiếu rel, <a> lồng nhau, thứ tự heading,
-     href="#" còn sót, tel:/mailto: sai; semantic (SEM-*/FORM-*): h1 ngoài <main>, <section> không heading,
-     aria-label trên div/span không role, <small> trong heading, input không label/autocomplete,
-     <th> thiếu scope, <picture><source> khác tỉ lệ ảnh mà thiếu width/height (CLS).
-  2. Runtime (Playwright, nhiều viewport): tràn ngang + phần tử gây tràn, ảnh lỗi, request 404,
-     lỗi console/JS, font web chưa load (rơi về font hệ thống), chữ bị cắt (overflow hidden),
-     chữ < 12px ở SP, vùng chạm < 32px ở SP, phần tử bị che/ra ngoài viewport.
+"""1 つまたは複数の静的ページの HTML/CSS/レスポンシブ/リンクを自動チェックする（デザイン不要）。
+2 層構成:
+  1. 静的（ファイル読み取り）: 閉じタグ漏れ・誤った閉じ方、id 重複、img の alt/src 欠落、画像/CSS/JS/内部リンクの
+     ファイル不存在、CSS の url() 切れ、target=_blank の rel 欠落、<a> の入れ子、見出し順序、
+     残った href="#"、誤った tel:/mailto:。セマンティック（SEM-*/FORM-*）: <main> 外の h1、見出しの無い <section>、
+     role の無い div/span への aria-label、見出し内の <small>、label/autocomplete の無い input、
+     scope の無い <th>、画像比率の異なる <picture><source> で width/height 未指定（CLS）。
+  2. ランタイム（Playwright、複数ビューポート）: 横はみ出し＋原因要素、画像エラー、404 リクエスト、
+     console/JS エラー、Web フォント未読み込み（システムフォントにフォールバック）、文字切れ（overflow hidden）、
+     SP で 12px 未満の文字、SP で 32px 未満のタップ領域、隠れている／ビューポート外の要素。
 
-  python3 audit.py index.html about.html                     # tĩnh + runtime pc=1440, tb=1024, sp=375
+  python3 audit.py index.html about.html                     # 静的 + ランタイム pc=1440, tb=1024, sp=375
   python3 audit.py *.html --vp pc=1440 --vp sp=375 --json out/audit.json
   python3 audit.py index.html --static-only
-  python3 audit.py index.html --base http://localhost:8080/   # trang dùng path gốc "/data/..."
+  python3 audit.py index.html --base http://localhost:8080/   # ルート相対パス "/data/..." を使うページ
   python3 audit.py index.html --base http://localhost:8080/ --spec spec.json --ab "TOP_PC=1280x740" --ab "TOP_SP=375x740"
-      → thêm vị trí khung/chữ theo XD/Figma (xdpos.py): khung lệch = E XD-POS, chữ lệch = W XD-POS-TEXT
-  Static còn có W CSS-CLASS-CLASH: class 1 từ vừa là component cấp gốc vừa là element trong component khác (L-CSS-10).
+      → XD/Figma に対する枠・文字の位置チェックを追加（xdpos.py）: 枠のズレ = E XD-POS、文字のズレ = W XD-POS-TEXT
+  静的チェックには W CSS-CLASS-CLASH もある: 1 語のクラスがルート階層のコンポーネントであり、同時に別コンポーネントの
+  要素としても使われている（L-CSS-10）。
 
-Tag CMS (@link(123), @page_url, {{...}}, <?php ... ?>) được coi là hợp lệ, không báo lỗi.
-Mã lỗi (E=lỗi phải sửa, W=cảnh báo nên xem, I=thông tin) dùng chung với references/lessons.md.
-Exit code 1 nếu còn E — dùng được trong vòng lặp sửa.
+CMS タグ（@link(123), @page_url, {{...}}, <?php ... ?>）は正当なものとして扱い、エラーにしない。
+エラーコード（E=要修正、W=要確認の警告、I=情報）は references/lessons.md と共通。
+E が残っていれば exit code 1 — 修正ループで利用可能。
 
-Lỗi mạng/console của tài nguyên KHÁC domain trang (GTM, analytics, font CDN bị CORS khi chạy localhost...)
-vẫn được báo nhưng ở mức W với hậu tố -EXT (không làm exit 1). `--strict-external` để coi chúng là E như cũ.
-Trang chờ networkidle tối đa --settle ms rồi kiểm tra tiếp (báo I LOAD-SLOW) thay vì lỗi timeout.
+ページと別ドメインのリソース（GTM、アナリティクス、localhost 実行時に CORS で失敗するフォント CDN など）の
+ネットワーク／console エラーも報告するが、W レベル・接尾辞 -EXT とする（exit 1 にはしない）。従来どおり E として
+扱うには `--strict-external`。networkidle は最大 --settle ms 待ってからチェックを続行する（タイムアウトエラーに
+せず I LOAD-SLOW を報告）。
 """
 import argparse, json, os, re, sys
 from collections import Counter
@@ -32,7 +34,7 @@ from html.parser import HTMLParser
 from urllib.parse import urlparse, unquote
 
 VOID = set('area base br col embed hr img input link meta param source track wbr'.split())
-# thẻ mà trình duyệt tự đóng — không báo lỗi khi thiếu thẻ đóng
+# ブラウザが自動で閉じるタグ — 閉じタグが無くてもエラーにしない
 OPTIONAL_CLOSE = set('p li dt dd option tr td th thead tbody tfoot colgroup rt rp optgroup'.split())
 CMS = re.compile(r'^\s*(@\w|\{\{|\{%|<\?|\$\{|\[\[)')
 
@@ -128,7 +130,7 @@ class Parser(HTMLParser):
 
 
 def resolve(page, u, base_dir):
-    """Trả về đường dẫn file local để kiểm tra tồn tại, hoặc None nếu không kiểm tra được."""
+    """ファイル存在チェック用のローカルパスを返す。チェックできない場合は None。"""
     if not u or CMS.match(u) or is_external(u) or u.startswith(('#', 'tel:', 'mailto:')): return None
     p = unquote(urlparse(u).path)
     if not p: return None
@@ -139,7 +141,7 @@ def resolve(page, u, base_dir):
 
 
 def picture_ratio_issues(page, root, pictures):
-    """<source> có ảnh khác tỉ lệ với <img> mà không ghi width/height → trình duyệt giữ chỗ theo tỉ lệ img → nhảy layout."""
+    """<source> の画像が <img> と比率が異なるのに width/height が無い → ブラウザは img の比率で領域を確保 → レイアウトシフトが起きる。"""
     try:
         from PIL import Image
     except ImportError:
@@ -193,7 +195,7 @@ def static_audit(page, root):
     for kind, u, ln in P.refs:
         f = resolve(page, u, root)
         if f is None: continue
-        if kind == 'a' and not os.path.splitext(f)[1]: continue  # route động, không đoán được
+        if kind == 'a' and not os.path.splitext(f)[1]: continue  # 動的ルートのため判定不可
         if not os.path.exists(f):
             code = {'img': 'IMG-MISSING', 'css': 'FILE-MISSING', 'js': 'FILE-MISSING', 'a': 'LINK-BROKEN'}[kind]
             out.append(('E', code, ln, f'không tìm thấy {u}'))
@@ -213,7 +215,7 @@ LAST_CLASS = re.compile(r'(?:^|[\s>+~])\.([A-Za-z][\w-]*)$')
 
 
 def split_top(group):
-    """Tách selector theo dấu phẩy CẤP NGOÀI (bỏ qua phẩy trong :not(...), :is(...))."""
+    """外側の階層のカンマでセレクタを分割する（:not(...), :is(...) 内のカンマは無視）。"""
     out, depth, cur = [], 0, ''
     for ch in group:
         if ch == '(': depth += 1
@@ -224,8 +226,8 @@ def split_top(group):
 
 
 def class_clash_issues(html, css_files):
-    """L-CSS-10: class vừa có rule CẤP GỐC (`.tag{}` = component dùng chung) vừa được dùng làm element trong
-    component khác (`.step-box .tag{}`) → element kế thừa ngầm width/padding/font của component chung."""
+    """L-CSS-10: ルート階層のルール（`.tag{}` = 共通コンポーネント）を持つクラスが、別コンポーネントの要素
+    （`.step-box .tag{}`）としても使われている → 要素が共通コンポーネントの width/padding/font を暗黙に継承してしまう。"""
     used = set(c for v in re.findall(r'class="([^"]*)"', html) for c in v.split())
     roots, owners = set(), {}
     for cf in css_files:
@@ -242,7 +244,7 @@ def class_clash_issues(html, css_files):
                     owners.setdefault(m.group(1), set()).add(parent)
     out = []
     for c in sorted(roots & set(owners) & used):
-        if '-' in c or c in LAYOUT_UTIL: continue  # tên 2 từ = component riêng (RSCSS); tiện ích layout dùng chung có chủ ý
+        if '-' in c or c in LAYOUT_UTIL: continue  # 2語のクラス名 = 独立コンポーネント（RSCSS）、共通レイアウトユーティリティは意図的な共用
         ps = sorted(p for p in owners[c] if p and p != '.' + c)[:3]
         if ps:
             out.append(('W', 'CSS-CLASS-CLASH', 0, f'.{c} là component cấp gốc (.{c}{{}}) nhưng cũng dùng làm element trong {", ".join(ps)} '
@@ -265,19 +267,19 @@ RUNTIME_JS = r"""
   const hiddenByAncestor = (el) => { for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
     const cs = getComputedStyle(p); if (cs.overflowX === 'hidden' || cs.overflowX === 'clip' || cs.position === 'fixed') return true; } return false; };
   const all = [...document.body.querySelectorAll('*')];
-  // 1. Phần tử gây tràn ngang (chỉ lấy phần tử ngoài cùng, bỏ con của nó)
+  // 1. 横はみ出しの原因要素（最も外側の要素のみ取得し、その子要素は除外）
   const over = all.filter(el => { const r = el.getBoundingClientRect();
     return (r.right > W + 1 || r.left < -1) && visible(el) && !hiddenByAncestor(el); });
   const top = over.filter(el => !over.some(o => o !== el && o.contains(el)));
   top.slice(0, 15).forEach(el => { const r = el.getBoundingClientRect();
     out.push(['E', 'RESP-OVERFLOW-EL', `${label(el)} tràn: left ${r.left.toFixed(0)} right ${r.right.toFixed(0)} (viewport ${W})`]); });
-  // 2. Ảnh lỗi
+  // 2. 表示できない画像
   document.querySelectorAll('img').forEach(img => {
     if (img.complete && img.naturalWidth === 0 && img.getAttribute('src') && !/^@/.test(img.getAttribute('src')))
       out.push(['E', 'IMG-BROKEN', `ảnh không load: ${img.getAttribute('src')}`]);
     else if (img.naturalWidth && visible(img)) {
       const r = img.getBoundingClientRect(), dpr = opt.sp ? 2 : 1;
-      // SVG là vector: naturalWidth chỉ là kích thước khai báo, không mờ khi phóng
+      // SVG はベクターなので naturalWidth は宣言サイズにすぎず、拡大してもぼやけない
       if (!/\.svg(\?|#|$)/i.test(img.currentSrc || img.getAttribute('src') || '') && img.naturalWidth < r.width * dpr * 0.75 && r.width > 80)
         out.push(['W', 'IMG-LOWRES', `${img.getAttribute('src')} hiển thị ${r.width.toFixed(0)}px nhưng ảnh gốc ${img.naturalWidth}px (mờ ở retina)`]);
       const cs = getComputedStyle(img);
@@ -285,13 +287,13 @@ RUNTIME_JS = r"""
         out.push(['W', 'IMG-DISTORT', `${img.getAttribute('src')} bị méo tỉ lệ (thêm object-fit hoặc sửa width/height)`]);
     }
   });
-  // 3. Chữ bị cắt
+  // 3. 文字の切れ
   all.forEach(el => {
     if (!visible(el) || !el.childNodes.length) return;
     const cs = getComputedStyle(el);
     const hasText = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
     if (!hasText) return;
-    // ẩn có chủ ý cho trình đọc màn hình (.sr-only / visually-hidden: khung 1x1px + clip) → không phải lỗi
+    // スクリーンリーダー用に意図的に隠した要素（.sr-only / visually-hidden: 1x1px + clip）→ エラーではない
     if (el.clientWidth <= 1 && el.clientHeight <= 1) return;
     if ((cs.overflow === 'hidden' || cs.overflowX === 'hidden') && cs.textOverflow !== 'ellipsis' && !cs.webkitLineClamp?.match?.(/\d/)
         && (el.scrollWidth > el.clientWidth + 2 || el.scrollHeight > el.clientHeight + 2))
@@ -299,13 +301,13 @@ RUNTIME_JS = r"""
     if (opt.sp && parseFloat(cs.fontSize) > 0 && parseFloat(cs.fontSize) < 12)
       out.push(['W', 'TEXT-TINY', `${label(el)} font-size ${cs.fontSize} < 12px ở SP`]);
   });
-  // 4. Font web không dùng được -> rơi về font hệ thống
+  // 4. Webフォントが使えずシステムフォントにフォールバック
   const fams = new Set();
   all.forEach(el => { if (visible(el)) fams.add(getComputedStyle(el).fontFamily.split(',')[0].trim().replace(/["']/g, '')); });
   const generic = /^(serif|sans-serif|monospace|system-ui|-apple-system|inherit|initial|Font Awesome.*|FontAwesome)$/i;
   fams.forEach(f => { if (!generic.test(f) && !document.fonts.check(`16px "${f}"`))
     out.push(['W', 'FONT-NOT-LOADED', `font "${f}" chưa load — đang hiển thị bằng font dự phòng`]); });
-  // 5. Vùng chạm nhỏ ở SP
+  // 5. SP でのタップ領域が小さい
   if (opt.sp) document.querySelectorAll('a[href], button, input, select, label[for]').forEach(el => {
     if (!visible(el)) return; const r = el.getBoundingClientRect();
     if ((r.width < 24 || r.height < 24) && el.textContent.trim().length < 3)
@@ -357,7 +359,7 @@ def runtime_audit(urls, vps, wait, strict=False):
                     if note: errs.append(('I', 'LOAD-SLOW', note))
                 except Exception as e:
                     errs.append(('E', 'LOAD', str(e)[:200]))
-                # cuộn hết trang để kích hoạt lazy-load / inview animation
+                # ページ最下部までスクロールして lazy-load / inview アニメーションを発火させる
                 pg.evaluate('async () => { for (let y = 0; y < document.body.scrollHeight; y += 600) { scrollTo(0, y); await new Promise(r => setTimeout(r, 40)); } scrollTo(0, 0); }')
                 pg.evaluate('document.fonts.ready'); pg.wait_for_timeout(wait)
                 r = pg.evaluate(RUNTIME_JS, {'sp': int(w) < 768})
@@ -369,7 +371,7 @@ def runtime_audit(urls, vps, wait, strict=False):
 
 
 def xdpos_issues(url, spec, ab, tol, settle):
-    """Chạy xdpos.py: khung lệch (B) = E vì shape↔DOM khớp chính xác; chữ lệch (T) = W vì tâm chữ còn nhiễu metric font."""
+    """xdpos.py を実行: 枠のズレ（B）= E（shape↔DOM は正確に対応するため）、文字のズレ（T）= W（文字中心にはフォントメトリクスのノイズが残るため）。"""
     import subprocess, tempfile
     name, _, vp = ab.partition('=')
     vp = vp or '1280x740'

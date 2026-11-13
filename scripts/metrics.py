@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Ghi & báo cáo hiệu suất mỗi lần code 1 trang: thời gian thực tế, số vòng render-sửa, số lần bị yêu cầu
-sửa (và lỗi thuộc bài học nào trong references/lessons.md), độ lệch cuối, lỗi audit, lỗi phát sinh sau giao.
-Dữ liệu dùng chung mọi dự án: <skill>/metrics/runs.jsonl (mỗi dòng 1 sự kiện). Run hiện tại lưu theo cwd.
+"""1 ページのコーディングごとの実績を記録・レポートする: 実作業時間、レンダリング→修正のループ回数、修正依頼の回数
+（とそれが references/lessons.md のどの教訓に該当するか）、最終的なズレ、audit エラー、納品後に発生した不具合。
+データは全案件共通: <skill>/metrics/runs.jsonl（1 行 1 イベント）。現在の run は cwd ごとに保存。
 
   python3 metrics.py start --page index --source png --note "LP top, PC+SP"
   python3 metrics.py iter --pixeldiff m/pd_pc.json --pixeldiff m/pd_sp.json --audit m/audit.json
-  python3 metrics.py fix --by user --lesson L-RESP-02 --note "SP override làm vỡ PC"     # người dùng yêu cầu sửa
-  python3 metrics.py fix --by self --lesson L-MEAS-03 --note "line-height p bị base ghi đè"  # tự phát hiện khi review
-  python3 metrics.py end --deliver                  # giao cho người dùng (bắt đầu tính lỗi sau giao)
-  python3 metrics.py fix --by user --after --lesson L-LINK-01 --note "link PDF hỏng"     # lỗi phát sinh sau giao
-  python3 metrics.py review --score 4 --note "lệch nhẹ footer"   # đánh giá chất lượng sau review (1-5)
-  python3 metrics.py report                         # bảng tất cả run + bài học tái phạm nhiều nhất
+  python3 metrics.py fix --by user --lesson L-RESP-02 --note "SP の上書きで PC が崩れた"     # ユーザーからの修正依頼
+  python3 metrics.py fix --by self --lesson L-MEAS-03 --note "p の line-height が base に上書きされた"  # レビュー時に自分で発見
+  python3 metrics.py end --deliver                  # ユーザーに納品（ここから納品後の不具合をカウント）
+  python3 metrics.py fix --by user --after --lesson L-LINK-01 --note "PDF リンク切れ"     # 納品後に発生した不具合
+  python3 metrics.py review --score 4 --note "footer が少しずれ"   # レビュー後の品質評価（1-5）
+  python3 metrics.py report                         # 全 run の一覧 + 再発の多い教訓
   python3 metrics.py report --project my-project --csv out.csv
 """
 import argparse, glob, json, os, sys, time
@@ -56,11 +56,11 @@ def events():
     return [json.loads(l) for l in open(LOG) if l.strip()]
 
 
-STALE_H = 12  # run không có sự kiện mới quá 12h mà chưa `end` → coi là bỏ dở
+STALE_H = 12  # `end` されず 12時間以上新しいイベントが無い run → 中断扱い
 
 
 def find_sources(days=60, near_days=14):
-    """L-MEAS-11: tìm file nguồn XD/Figma. Trả (trong dự án ≤3 cấp, ở Desktop/Downloads sửa trong near_days ngày)."""
+    """L-MEAS-11: XD/Figma の元ファイルを探す。（プロジェクト内は 3 階層以内、Desktop/Downloads は near_days 日以内に更新されたもの）を返す。"""
     now_ = time.time()
     proj = {p for d in range(4) for ext in ('xd', 'fig')
             for p in glob.glob(os.path.join(os.getcwd(), *(['*'] * d), f'*.{ext}')) if os.path.getmtime(p) > now_ - days * 86400}
@@ -87,7 +87,7 @@ def summarize():
         st = datetime.fromisoformat(r['start']); en = datetime.fromisoformat(r['end']) if r.get('end') else None
         last_ts = datetime.fromisoformat(r['last'])
         if en is None and (datetime.now() - last_ts).total_seconds() > STALE_H * 3600:
-            en = last_ts; r['abandoned'] = True          # bỏ dở: tính tới sự kiện cuối, không tới hiện tại
+            en = last_ts; r['abandoned'] = True          # 中断: 現在時刻ではなく最後のイベントまでで計算
         if r.get('abandoned') and r.get('end'):
             en = min(en, last_ts) if en else last_ts
         last = r['iters'][-1] if r['iters'] else {}
@@ -97,7 +97,7 @@ def summarize():
             'active_min': r.get('active_min'), 'done': bool(en), 'abandoned': bool(r.get('abandoned')),
             'iterations': len(r['iters']),
             'user_fixes': len(r['fix_user']), 'self_fixes': len(r['fix_self']), 'bugs_after': len(r['fix_after']),
-            # mọi lần NGƯỜI DÙNG yêu cầu sửa (trước + sau giao) — trước đây chỉ đếm trước giao nên luôn ≈ 0
+            # ユーザーからの修正依頼すべて（納品前＋納品後）— 以前は納品前のみ数えていたため常に ≈ 0 だった
             'user_req': len(r['fix_user']) + sum(1 for x in r['fix_after'] if x.get('by') == 'user'),
             'max_delta': last.get('max_abs_delta'), 'mean_diff': last.get('mean_diff_pct'),
             'audit_E': last.get('audit_E'), 'audit_W': last.get('audit_W'),

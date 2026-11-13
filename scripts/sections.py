@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Quét dọc mép trái & phải trang để tìm ranh giới các section (đổi màu nền / gradient).
-Dùng cho cả ảnh design lẫn ảnh render để so chiều cao từng section.
+"""ページの左右端を縦に走査し、セクションの境界（背景色 / グラデーションの切り替わり）を探す。
+デザイン画像とレンダリング画像の両方に使い、各セクションの高さを比較する。
 
   python3 sections.py design_pc.png --scale 2
   python3 sections.py render_pc.png --scale 1

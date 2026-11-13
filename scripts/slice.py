@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Cắt ảnh design dài thành các đoạn nhỏ để xem bằng Read (ảnh quá dài sẽ bị thu nhỏ không đọc được).
+"""縦長のデザイン画像を小さな区間に切り分けて Read で確認できるようにする（長すぎる画像は縮小されて読めない）。
 
-Ví dụ:
-  python3 slice.py design_pc.png out/ --scale 2 --step 900        # PC 2x -> mỗi đoạn 900 CSS px
-  python3 slice.py design_sp.png out/ --scale 2 --step 2000 --grid 3  # SP: ghép 3 cột cạnh nhau
-Toạ độ y của đoạn thứ i = i*step (đơn vị CSS px), in ra để tra cứu.
+例:
+  python3 slice.py design_pc.png out/ --scale 2 --step 900        # PC 2x -> 1 区間 900 CSS px
+  python3 slice.py design_sp.png out/ --scale 2 --step 2000 --grid 3  # SP: 3 列に並べて結合
+i 番目の区間の y 座標 = i*step（CSS px 単位）、参照用に出力する。
 """
 import argparse, os
 from PIL import Image

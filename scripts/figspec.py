@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Lấy spec chính xác từ file Figma (qua Figma MCP `use_figma`) → spec.json cùng định dạng với xdspec.py.
+"""Figma ファイルから正確な spec を取得（Figma MCP `use_figma` 経由）→ xdspec.py と同じ形式の spec.json。
 
-Vì sao không dùng số từ get_design_context: Figma lưu letter-spacing theo % (6% = 0.06em) nhưng code tham khảo
-của get_design_context xuất px đã nhân với font-size (`tracking-[0.96px]` cho 16px) → mất đơn vị gốc, làm tròn
-sai, và sai khi font-size đổi ở SP (L-MEAS-14). Script này đọc thẳng {unit, value} của từng đoạn chữ.
+get_design_context の数値を使わない理由: Figma は letter-spacing を % で保持する（6% = 0.06em）が、
+get_design_context の参考コードは font-size を掛けた px で出力する（16px なら `tracking-[0.96px]`）→ 元の単位が失われ、
+丸め誤差が出て、SP で font-size が変わると誤る（L-MEAS-14）。このスクリプトは各テキストの {unit, value} を直接読む。
 
-  python3 figspec.py js 1:9 15:200            # in đoạn JS → dán nguyên văn vào use_figma (mỗi frame 1 lần gọi nếu lớn)
-  python3 figspec.py js 1:9 --only texts      # frame lớn: tách 2 lần gọi (--only texts / --only shapes)
+  python3 figspec.py js 1:9 15:200            # JS を出力 → そのまま use_figma に貼り付け（大きい場合はフレームごとに 1 回）
+  python3 figspec.py js 1:9 --only texts      # 大きいフレーム: 2 回に分けて呼ぶ（--only texts / --only shapes）
   python3 figspec.py save raw_pc.json raw_sp.json --out spec.json --summary
-                                              # raw_*.json = giá trị use_figma trả về, lưu nguyên văn
+                                              # raw_*.json = use_figma の戻り値をそのまま保存したもの
 
-spec.json (giống xdspec.py, dùng được với xdcmp.py):
+spec.json（xdspec.py と同じ、xdcmp.py で使用可）:
   artboards: {name: {id, x, y, w, h}}
   texts: [{ab, id, text, family, weight, size, ls(em), ls_raw, lh(px|null), lh_raw, color, cop, x, y, case, deco}]
-    ls = PERCENT/100 hoặc PIXELS/size (em, 4 số lẻ) — CSS: `letter-spacing: <ls>em`, KHÔNG dùng px.
-    ls_raw = giá trị gốc trong Figma ("6%" / "1.2px"); lh_raw = "AUTO" / "170%" / "28px".
-    lh = null khi AUTO (Figma tự tính theo font — đừng đoán, đo bằng render).
-    color = hex của fill trên cùng; cop = opacity của fill (nếu < 1).
+    ls = PERCENT/100 または PIXELS/size（em、小数 4 桁）— CSS: `letter-spacing: <ls>em`、px は使わない。
+    ls_raw = Figma の元の値（"6%" / "1.2px"）、lh_raw = "AUTO" / "170%" / "28px"。
+    lh = AUTO のとき null（Figma がフォントから自動計算 — 推測せずレンダリングで計測する）。
+    color = 最上位 fill の hex、cop = fill の opacity（1 未満の場合）。
   shapes: [{ab, id, name, kind, x, y, w, h, fill, opacity, gop, group, z, stroke, sw, r, shadow, blur}]
-Toạ độ tương đối theo frame (CSS px @1x). Node ẩn (và con của nó) bị bỏ qua.
+座標はフレーム基準（CSS px @1x）。非表示ノード（とその子）は除外。
 """
 import argparse, json, sys
 from collections import Counter
